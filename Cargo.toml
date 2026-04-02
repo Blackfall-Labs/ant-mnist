@@ -1,0 +1,10 @@
+[package]
+name = "ant-mnist"
+version = "0.1.0"
+edition = "2021"
+description = "LeNet-5 on MNIST — proving ground for Atomic Neural Transistors"
+publish = false
+
+[dependencies]
+atomic-neural-transistors = { path = "../atomic-neural-transistors" }
+ternary-signal = { path = "../ternary-signal" }
