@@ -1,0 +1,137 @@
+meta {
+  name "mnist_classifier"
+  version 1
+  description "MNIST digit classification with thermal mastery learning"
+}
+use :ant_ml
+use :mnist
+
+# Architecture: 784 → 300 → 100 → 10
+# Three thermal synaptic regions, all learning.
+
+def build_network() do
+  # All regions start HOT with random initialization.
+  # Config: [threshold, decay, gate, cooling_rate, warming_step, warming_threshold]
+  thermal_load_synaptic("w1", 300, 784, 42)
+  thermal_load_synaptic("w2", 100, 300, 7919)
+  thermal_load_synaptic("w3", 10, 100, 104729)
+end
+
+def forward(input) do
+  w1 = thermal_load_synaptic("w1", 300, 784, 42)
+  w2 = thermal_load_synaptic("w2", 100, 300, 7919)
+  w3 = thermal_load_synaptic("w3", 10, 100, 104729)
+
+  h1 = thermal_matmul(input, w1)
+  h1 = relu(h1)
+  h2 = thermal_matmul(h1, w2)
+  h2 = relu(h2)
+  thermal_matmul(h2, w3)
+end
+
+def predict(input) do
+  argmax(forward(input))
+end
+
+def train_step(input, label) do
+  w1 = thermal_load_synaptic("w1", 300, 784, 42)
+  w2 = thermal_load_synaptic("w2", 100, 300, 7919)
+  w3 = thermal_load_synaptic("w3", 10, 100, 104729)
+
+  # Forward
+  h1 = thermal_matmul(input, w1)
+  h1 = relu(h1)
+  h2 = thermal_matmul(h1, w2)
+  h2 = relu(h2)
+  out = thermal_matmul(h2, w3)
+
+  predicted = argmax(out)
+  correct = predicted == label
+
+  # Target: correct class excitatory, others inhibitory
+  target = onehot(label, 10, 60, 40)
+  out_c = clamp(out, -60, 60)
+
+  # Output region mastery
+  # Config: [threshold, decay, gate, cooling, warming_step, warming_threshold]
+  thermal_mastery_update(w3, h2, out_c, target, correct, [10, 1, 5, 200, 10, 20])
+
+  # Hidden 2 target: derived from output error × output weight signs
+  # For now, only train output region until mastery algorithm is proven
+  # TODO: hidden target derivation after output region converges
+
+  predicted
+end
+
+def decay_all() do
+  w1 = thermal_load_synaptic("w1", 300, 784, 42)
+  w2 = thermal_load_synaptic("w2", 100, 300, 7919)
+  w3 = thermal_load_synaptic("w3", 10, 100, 104729)
+  thermal_decay(w3)
+  # thermal_decay(w2)  # uncomment when hidden mastery is enabled
+  # thermal_decay(w1)
+end
+
+main do
+  print("Loading MNIST...")
+  train_data = load_train()
+  test_data = load_test()
+  n_train = dataset_len(train_data)
+  n_test = dataset_len(test_data)
+  print("Loaded: ", n_train, " train, ", n_test, " test")
+
+  build_network()
+
+  # Baseline evaluation
+  print("\n--- Baseline (random strengths) ---")
+  correct = 0
+  n_test.times do |i|
+    sample = get_sample(test_data, i)
+    input = slice(sample, 0, 784)
+    label = slice(sample, 784, 1)
+    label = argmax(label)
+    pred = predict(input)
+    if pred == label do
+      correct = correct + 1
+    end
+  end
+  print("Baseline: ", correct, "/", n_test)
+
+  # Training: 5 cycles
+  5.times do |cycle|
+    train_correct = 0
+    n_train.times do |i|
+      sample = get_sample(train_data, i)
+      input = slice(sample, 0, 784)
+      label = slice(sample, 784, 1)
+      label = argmax(label)
+      pred = train_step(input, label)
+      if pred == label do
+        train_correct = train_correct + 1
+      end
+    end
+    decay_all()
+
+    # Evaluate
+    test_correct = 0
+    n_test.times do |i|
+      sample = get_sample(test_data, i)
+      input = slice(sample, 0, 784)
+      label = slice(sample, 784, 1)
+      label = argmax(label)
+      pred = predict(input)
+      if pred == label do
+        test_correct = test_correct + 1
+      end
+    end
+
+    print("Cycle ", cycle + 1, ": train ", train_correct, "/", n_train, ", test ", test_correct, "/", n_test)
+
+    # Thermal summary
+    w3 = thermal_load_synaptic("w3", 10, 100, 104729)
+    temps = thermal_summary(w3)
+    print("  W3 temps: HOT=", temps[0], " WARM=", temps[1], " COOL=", temps[2], " COLD=", temps[3])
+  end
+
+  print("\n=== Done ===")
+end

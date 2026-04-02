@@ -1,120 +1,79 @@
-mod mnist;
-mod encode;
-mod network;
-mod eval;
+//! ant-mnist runtime — loads and executes a .rune program for MNIST classification.
+//!
+//! Usage: ant-mnist [rune_file] [data_dir]
+//!   rune_file: path to .rune program (default: runes/mnist_classifier.rune)
+//!   data_dir:  path to MNIST IDX files (default: data)
+//!
+//! Provides two module namespaces:
+//!   :ant_ml  — matmul, relu, mastery, thermal, salience, neuromod, etc.
+//!   :mnist   — load_train, load_test, get_sample, dataset_len
+//!
+//! The .rune file IS the program. Hot-reloadable without recompilation.
 
-use std::path::Path;
-use std::time::Instant;
+mod mnist;
+mod mnist_module;
+
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+
+use atomic_neural_transistors::modules::ant_ml::{AntMlModule, AntRuntime};
+use runes_core::engine::Engine;
+use runes_parser::lexer::Lexer;
+use runes_parser::parser::Parser;
+use runes_eval::evaluator::Evaluator;
+
+use mnist_module::{MnistModule, MnistRuntime};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let data_dir = std::env::args().nth(1).unwrap_or("data".into());
-    let checkpoint_path = std::env::args().nth(2).unwrap_or("checkpoints/ant_mnist.ant".into());
+    let rune_file = std::env::args().nth(1)
+        .unwrap_or_else(|| "runes/mnist_classifier.rune".into());
+    let data_dir = std::env::args().nth(2)
+        .unwrap_or_else(|| "data".into());
 
-    println!("=== ANT-MNIST: LeNet-5 with Atomic Neural Transistors ===\n");
+    eprintln!("=== ANT-MNIST Runtime ===");
+    eprintln!("  Rune: {}", rune_file);
+    eprintln!("  Data: {}", data_dir);
+    eprintln!();
 
-    // Load datasets
-    print!("Loading MNIST... ");
-    let train = mnist::MnistDataset::load(
-        Path::new(&format!("{}/train-images-idx3-ubyte", data_dir)),
-        Path::new(&format!("{}/train-labels-idx1-ubyte", data_dir)),
-    )?;
-    let test = mnist::MnistDataset::load(
-        Path::new(&format!("{}/t10k-images-idx3-ubyte", data_dir)),
-        Path::new(&format!("{}/t10k-labels-idx1-ubyte", data_dir)),
-    )?;
-    println!("train={}, test={}", train.len(), test.len());
+    // Read the .rune source
+    let source = std::fs::read_to_string(&rune_file)
+        .map_err(|e| format!("Failed to read {}: {}", rune_file, e))?;
 
-    // Show a few samples
-    println!("\nSample images (ternary-encoded):");
-    for i in [0, 1, 7, 3] {
-        let img = &train.images[i];
-        let encoded = encode::encode_image(&img.pixels);
-        println!("--- Digit {} ---", img.label);
-        encode::print_encoded(&encoded);
-    }
+    // Build the engine with both modules
+    let engine = Engine::builder()
+        .namespace("default")
+            .module(AntMlModule::new())
+            .module(MnistModule::new())
+        .build()
+        .map_err(|e| format!("Engine build failed: {:?}", e))?;
 
-    // Create network
-    let mut net = network::AntNetwork::new();
+    // Create and register both runtimes
+    let ant_runtime = Arc::new(Mutex::new(AntRuntime::new()));
+    let mnist_runtime = Arc::new(Mutex::new(MnistRuntime::new(PathBuf::from(&data_dir))));
 
-    // Try loading checkpoint
-    let cp = Path::new(&checkpoint_path);
-    if cp.exists() {
-        match net.load(cp) {
-            Ok(_) => println!("\nLoaded checkpoint: {}", checkpoint_path),
-            Err(e) => println!("\nCheckpoint load failed ({}), starting fresh", e),
+    // Parse
+    let tokens = Lexer::new(&source).tokenize()
+        .map_err(|e| format!("Lex error: {:?}", e))?;
+    let program = Parser::new(tokens).parse_program()
+        .map_err(|e| format!("Parse error: {:?}", e))?;
+
+    // Create evaluator and register both runtimes in the host registry
+    let mut evaluator = Evaluator::new();
+    evaluator.register_runtime(ant_runtime.clone());
+    evaluator.register_runtime(mnist_runtime.clone());
+
+    // Execute the program
+    eprintln!("Running {}...\n", rune_file);
+    match evaluator.eval_with_engine(&program, &engine) {
+        Ok(_) => {
+            eprintln!("\n=== Program completed ===");
+        }
+        Err(e) => {
+            eprintln!("\n=== Runtime error ===");
+            eprintln!("{}", e);
+            std::process::exit(1);
         }
     }
 
-    // Baseline: random weights
-    println!("\n--- Baseline (random weights) ---");
-    let baseline = eval::evaluate(&net, &test);
-    baseline.print();
-
-    // Training cycles
-    let max_cycles = 5;
-    let mut best_test_acc = 0.0f32;
-
-    for cycle in 1..=max_cycles {
-        println!("\n=== Training Cycle {} ===", cycle);
-        let cycle_start = Instant::now();
-        net.reset_counters();
-
-        // Shuffle training data (deterministic pseudo-shuffle via cycle seed)
-        let mut indices: Vec<usize> = (0..train.len()).collect();
-        // Simple Fisher-Yates with xorshift
-        let mut rng = (cycle as u64) * 6364136223846793005 + 1;
-        for i in (1..indices.len()).rev() {
-            rng ^= rng << 13; rng ^= rng >> 7; rng ^= rng << 17;
-            let j = (rng as usize) % (i + 1);
-            indices.swap(i, j);
-        }
-
-        let mut batch_correct = 0u64;
-        let mut batch_total = 0u64;
-
-        for (step, &idx) in indices.iter().enumerate() {
-            let image = &train.images[idx];
-            let input = encode::encode_image(&image.pixels);
-            let predicted = net.learn(&input, image.label);
-
-            batch_total += 1;
-            if predicted == image.label as usize { batch_correct += 1; }
-
-            // Progress every 10K
-            if (step + 1) % 10000 == 0 {
-                let batch_acc = batch_correct as f32 / batch_total as f32 * 100.0;
-                print!("  {:>5}/{}: train={:.1}%  {}\r",
-                    step + 1, train.len(), batch_acc, net.thermal_summary());
-                batch_correct = 0;
-                batch_total = 0;
-            }
-        }
-
-        let train_acc = net.accuracy() * 100.0;
-        let cycle_time = cycle_start.elapsed().as_secs_f32();
-        println!("  Train: {:.1}%  ({:.1}s)                              ", train_acc, cycle_time);
-        println!("  Thermal: {}", net.thermal_summary());
-        println!("  Transitions: L1:{} L2:{} L3:{}", net.m1.transitions, net.m2.transitions, net.m3.transitions);
-
-        // Evaluate on test set
-        println!("\n  --- Test Evaluation ---");
-        let result = eval::evaluate(&net, &test);
-        result.print();
-
-        if result.accuracy > best_test_acc {
-            best_test_acc = result.accuracy;
-            // Save checkpoint
-            std::fs::create_dir_all(Path::new(&checkpoint_path).parent().unwrap_or(Path::new(".")))?;
-            net.save(cp)?;
-            println!("  Saved checkpoint ({:.1}%)", best_test_acc * 100.0);
-        }
-
-        if result.accuracy >= 0.95 {
-            println!("\n>>> TARGET REACHED: {:.1}% <<<", result.accuracy * 100.0);
-            break;
-        }
-    }
-
-    println!("\n=== Done. Best test accuracy: {:.1}% ===", best_test_acc * 100.0);
     Ok(())
 }
