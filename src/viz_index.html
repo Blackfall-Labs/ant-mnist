@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ANT-MNIST Dashboard</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a0a0f; color: #e0e0e0; font-family: 'Consolas', 'Courier New', monospace; padding: 20px; }
+h1 { color: #4af; margin-bottom: 10px; font-size: 22px; }
+h2 { color: #8cf; margin: 15px 0 8px; font-size: 16px; border-bottom: 1px solid #333; padding-bottom: 4px; }
+.controls { margin: 10px 0; }
+.controls button { background: #234; color: #4af; border: 1px solid #4af; padding: 8px 20px; margin-right: 10px; cursor: pointer; font-family: inherit; font-size: 14px; }
+.controls button:hover { background: #345; }
+.controls button.stop { border-color: #f44; color: #f44; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+.panel { background: #111; border: 1px solid #222; border-radius: 6px; padding: 12px; }
+.stat { display: inline-block; margin-right: 20px; }
+.stat .label { color: #888; font-size: 12px; }
+.stat .value { color: #4f8; font-size: 24px; font-weight: bold; }
+.stat .value.bad { color: #f44; }
+.bar-row { display: flex; align-items: center; margin: 4px 0; }
+.bar-row .lbl { width: 30px; font-size: 12px; color: #888; }
+.bar-row .bar { height: 16px; display: flex; flex: 1; }
+.bar-row .bar div { height: 100%; }
+.hot { background: #f44; }
+.warm { background: #fa0; }
+.cool { background: #4af; }
+.frozen { background: #226; }
+.bar-legend { font-size: 11px; color: #666; margin-top: 4px; }
+.bar-legend span { margin-right: 12px; }
+.confusion { font-size: 11px; line-height: 1.6; }
+.confusion td { text-align: right; padding: 1px 5px; min-width: 35px; }
+.confusion .header { color: #888; }
+.confusion .diag { color: #4f8; font-weight: bold; }
+.confusion .off { color: #f44; }
+.digit-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.digit-card { background: #1a1a22; border: 1px solid #333; border-radius: 4px; padding: 6px; text-align: center; width: 90px; }
+.digit-card.wrong { border-color: #f44; }
+.digit-card.right { border-color: #4f8; }
+.digit-card canvas { display: block; margin: 0 auto 4px; image-rendering: pixelated; }
+.digit-card .pred { font-size: 12px; }
+.history-chart { width: 100%; height: 120px; position: relative; background: #0a0a12; border: 1px solid #222; }
+.per-class-bars { display: flex; gap: 4px; align-items: flex-end; height: 80px; }
+.per-class-bars .col { flex: 1; display: flex; flex-direction: column; align-items: center; }
+.per-class-bars .col .fill { width: 100%; background: #4af; min-height: 1px; }
+.per-class-bars .col .lbl { font-size: 11px; color: #888; margin-top: 2px; }
+.per-class-bars .col .pct { font-size: 10px; color: #4f8; }
+.progress { background: #222; height: 6px; border-radius: 3px; margin: 8px 0; }
+.progress .fill { background: #4af; height: 100%; border-radius: 3px; transition: width 0.3s; }
+</style>
+</head>
+<body>
+<h1>ANT-MNIST Dashboard</h1>
+<div class="controls">
+    <button onclick="start()">Start Training</button>
+    <button class="stop" onclick="stop()">Stop</button>
+    <span id="status" style="color:#888; margin-left:15px;">Idle</span>
+</div>
+<div class="progress"><div class="fill" id="progressBar" style="width:0%"></div></div>
+
+<div class="grid">
+    <div class="panel">
+        <h2>Accuracy</h2>
+        <div class="stat"><div class="label">Train</div><div class="value" id="trainAcc">-</div></div>
+        <div class="stat"><div class="label">Test</div><div class="value" id="testAcc">-</div></div>
+        <div class="stat"><div class="label">Best</div><div class="value" id="bestAcc">-</div></div>
+        <div class="stat"><div class="label">Cycle</div><div class="value" id="cycle">-</div></div>
+        <h2>Per-Class Accuracy</h2>
+        <div class="per-class-bars" id="perClassBars"></div>
+    </div>
+    <div class="panel">
+        <h2>Thermal State</h2>
+        <div id="thermalBars"></div>
+        <div class="bar-legend">
+            <span><span class="hot" style="display:inline-block;width:10px;height:10px"></span> Hot</span>
+            <span><span class="warm" style="display:inline-block;width:10px;height:10px"></span> Warm</span>
+            <span><span class="cool" style="display:inline-block;width:10px;height:10px"></span> Cool</span>
+            <span><span class="frozen" style="display:inline-block;width:10px;height:10px"></span> Frozen</span>
+        </div>
+        <h2>Transitions</h2>
+        <div id="transitions" style="font-size:13px;color:#888;"></div>
+        <h2>History</h2>
+        <canvas id="historyCanvas" width="400" height="120" style="width:100%;height:120px;background:#0a0a12;border:1px solid #222;"></canvas>
+    </div>
+</div>
+
+<div class="panel" style="margin-top:15px;">
+    <h2>Sample Predictions</h2>
+    <div class="digit-grid" id="digitGrid"></div>
+</div>
+
+<div class="panel" style="margin-top:15px;">
+    <h2>Confusion Matrix</h2>
+    <table class="confusion" id="confusionTable"></table>
+</div>
+
+<script>
+let pollInterval = null;
+
+function start() { fetch('/api/start'); document.getElementById('status').textContent = 'Training...'; }
+function stop() { fetch('/api/stop'); document.getElementById('status').textContent = 'Stopped'; }
+
+function poll() {
+    fetch('/api/state').then(r => r.json()).then(s => {
+        if (s.running) document.getElementById('status').textContent = `Cycle ${s.cycle} — ${s.step}/${s.total_steps}`;
+
+        document.getElementById('trainAcc').textContent = (s.train_acc * 100).toFixed(1) + '%';
+        document.getElementById('testAcc').textContent = (s.test_acc * 100).toFixed(1) + '%';
+        document.getElementById('bestAcc').textContent = (s.best_test_acc * 100).toFixed(1) + '%';
+        document.getElementById('cycle').textContent = s.cycle;
+
+        const pct = s.total_steps > 0 ? (s.step / s.total_steps * 100) : 0;
+        document.getElementById('progressBar').style.width = pct + '%';
+
+        // Per-class bars
+        let pcHtml = '';
+        for (let i = 0; i < 10; i++) {
+            const a = (s.per_class_acc[i] * 100);
+            pcHtml += `<div class="col"><div class="pct">${a.toFixed(0)}%</div><div class="fill" style="height:${a * 0.8}px"></div><div class="lbl">${i}</div></div>`;
+        }
+        document.getElementById('perClassBars').innerHTML = pcHtml;
+
+        // Thermal bars
+        const layers = [['L1 (784→300)', s.thermal.l1], ['L2 (300→100)', s.thermal.l2], ['L3 (100→10)', s.thermal.l3]];
+        let thHtml = '';
+        for (const [name, t] of layers) {
+            const total = t[0] + t[1] + t[2] + t[3];
+            if (total === 0) continue;
+            const pcts = t.map(v => (v / total * 100).toFixed(1));
+            thHtml += `<div class="bar-row"><div class="lbl">${name}</div><div class="bar">`;
+            thHtml += `<div class="hot" style="width:${pcts[0]}%" title="Hot: ${t[0]}"></div>`;
+            thHtml += `<div class="warm" style="width:${pcts[1]}%" title="Warm: ${t[1]}"></div>`;
+            thHtml += `<div class="cool" style="width:${pcts[2]}%" title="Cool: ${t[2]}"></div>`;
+            thHtml += `<div class="frozen" style="width:${pcts[3]}%" title="Frozen: ${t[3]}"></div>`;
+            thHtml += `</div></div>`;
+        }
+        document.getElementById('thermalBars').innerHTML = thHtml;
+
+        // Transitions
+        document.getElementById('transitions').textContent = `L1: ${s.transitions[0].toLocaleString()}  L2: ${s.transitions[1].toLocaleString()}  L3: ${s.transitions[2].toLocaleString()}`;
+
+        // History chart
+        if (s.history.length > 0) drawHistory(s.history);
+
+        // Confusion matrix
+        if (s.confusion) drawConfusion(s.confusion);
+
+        // Sample digits
+        if (s.samples && s.samples.length > 0) drawSamples(s.samples);
+    }).catch(() => {});
+}
+
+function drawHistory(history) {
+    const canvas = document.getElementById('historyCanvas');
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    if (history.length < 2) return;
+    const xStep = w / (history.length - 1 || 1);
+
+    // Train acc line
+    ctx.beginPath(); ctx.strokeStyle = '#4af'; ctx.lineWidth = 2;
+    for (let i = 0; i < history.length; i++) {
+        const x = i * xStep, y = h - history[i].train_acc * h;
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    // Test acc line
+    ctx.beginPath(); ctx.strokeStyle = '#4f8'; ctx.lineWidth = 2;
+    for (let i = 0; i < history.length; i++) {
+        const x = i * xStep, y = h - history[i].test_acc * h;
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    // Labels
+    ctx.fillStyle = '#4af'; ctx.font = '10px monospace'; ctx.fillText('train', 5, 12);
+    ctx.fillStyle = '#4f8'; ctx.fillText('test', 50, 12);
+
+    // 50% and 95% lines
+    ctx.strokeStyle = '#333'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.moveTo(0, h * 0.5); ctx.lineTo(w, h * 0.5); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, h * 0.05); ctx.lineTo(w, h * 0.05); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#444'; ctx.fillText('50%', w - 25, h * 0.5 - 2);
+    ctx.fillText('95%', w - 25, h * 0.05 - 2);
+}
+
+function drawConfusion(cm) {
+    let html = '<tr><td class="header"></td>';
+    for (let c = 0; c < 10; c++) html += `<td class="header">${c}</td>`;
+    html += '</tr>';
+    for (let r = 0; r < 10; r++) {
+        html += `<tr><td class="header">${r}</td>`;
+        for (let c = 0; c < 10; c++) {
+            const v = cm[r][c];
+            const cls = r === c ? 'diag' : (v > 0 ? 'off' : '');
+            html += `<td class="${cls}">${v || ''}</td>`;
+        }
+        html += '</tr>';
+    }
+    document.getElementById('confusionTable').innerHTML = html;
+}
+
+function drawSamples(samples) {
+    const grid = document.getElementById('digitGrid');
+    grid.innerHTML = '';
+    for (const s of samples) {
+        const card = document.createElement('div');
+        card.className = 'digit-card ' + (s.correct ? 'right' : 'wrong');
+
+        const canvas = document.createElement('canvas');
+        canvas.width = 28; canvas.height = 28;
+        canvas.style.width = '56px'; canvas.style.height = '56px';
+        const ctx = canvas.getContext('2d');
+        const imgData = ctx.createImageData(28, 28);
+        for (let i = 0; i < 784; i++) {
+            const v = s.pixels[i];
+            imgData.data[i * 4] = v;
+            imgData.data[i * 4 + 1] = v;
+            imgData.data[i * 4 + 2] = v;
+            imgData.data[i * 4 + 3] = 255;
+        }
+        ctx.putImageData(imgData, 0, 0);
+
+        const pred = document.createElement('div');
+        pred.className = 'pred';
+        pred.style.color = s.correct ? '#4f8' : '#f44';
+        pred.textContent = `${s.label}→${s.predicted}`;
+
+        card.appendChild(canvas);
+        card.appendChild(pred);
+        grid.appendChild(card);
+    }
+}
+
+pollInterval = setInterval(poll, 1000);
+poll();
+</script>
+</body>
+</html>
