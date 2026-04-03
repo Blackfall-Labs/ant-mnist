@@ -6,6 +6,8 @@ export interface DetViz {
   template: number[];       // 784 values (28x28 imprinted pattern)
   eval_accuracy: number;
   confidence_history: number[];
+  thermals: number[];       // 784 temperature values (0-255, HOT→COLD)
+  activations: number[];    // 784 activation glow values (0-255, decays)
   weight_currents?: number[];
   weight_pressures?: number[];
   correct_examples?: number[][];

@@ -1,5 +1,7 @@
 import { useCtrl } from "@/context";
 import { TemplateHeatmap } from "@/components/TemplateHeatmap";
+import { ThermalMatrix } from "@/components/ThermalMatrix";
+import { ActivationMatrix } from "@/components/ActivationMatrix";
 import { Sparkline } from "@/components/Sparkline";
 
 export function DetectorsPage() {
@@ -22,16 +24,28 @@ export function DetectorsPage() {
               borderColor: "var(--border)",
             }}
           >
-            {/* Template */}
-            <div className="flex flex-col items-center gap-1">
-              <span
-                className="text-sm font-bold"
-                style={{ color: "var(--accent-orange)" }}
-              >
-                {det.digit}
-              </span>
-              <TemplateHeatmap template={det.template} size={84} />
-              <span className="text-[10px] text-gray-500">{det.phase}</span>
+            {/* Heatmaps */}
+            <div className="flex gap-2 items-start">
+              <div className="flex flex-col items-center gap-1">
+                <span
+                  className="text-sm font-bold"
+                  style={{ color: "var(--accent-orange)" }}
+                >
+                  {det.digit}
+                </span>
+                <TemplateHeatmap template={det.template} size={84} />
+                <span className="text-[8px] text-gray-600">Template</span>
+              </div>
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-[10px] text-gray-500">{det.phase}</span>
+                <ThermalMatrix thermals={det.thermals} size={84} />
+                <span className="text-[8px] text-gray-600">Thermal</span>
+              </div>
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-[10px] text-gray-500">&nbsp;</span>
+                <ActivationMatrix activations={det.activations} size={84} />
+                <span className="text-[8px] text-gray-600">Activity</span>
+              </div>
             </div>
 
             {/* Stats + sparkline */}

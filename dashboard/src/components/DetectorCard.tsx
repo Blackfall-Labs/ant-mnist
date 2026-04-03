@@ -1,5 +1,7 @@
 import type { DetViz } from "@/types";
 import { TemplateHeatmap } from "./TemplateHeatmap";
+import { ThermalMatrix } from "./ThermalMatrix";
+import { ActivationMatrix } from "./ActivationMatrix";
 import { Sparkline } from "./Sparkline";
 import { useCtrl } from "@/context";
 
@@ -50,8 +52,21 @@ export function DetectorCard({ det }: Props) {
         <Btn label="Flush" cls="danger" onClick={() => sendCmd("flush", det.digit)} />
       </div>
 
-      {/* Template heatmap */}
-      <TemplateHeatmap template={det.template} size={56} />
+      {/* Heatmaps row: template | thermals | activations */}
+      <div className="flex gap-1">
+        <div className="text-center">
+          <TemplateHeatmap template={det.template} size={56} />
+          <span className="text-[8px] text-gray-600">Template</span>
+        </div>
+        <div className="text-center">
+          <ThermalMatrix thermals={det.thermals} size={56} />
+          <span className="text-[8px] text-gray-600">Thermal</span>
+        </div>
+        <div className="text-center">
+          <ActivationMatrix activations={det.activations} size={56} />
+          <span className="text-[8px] text-gray-600">Activity</span>
+        </div>
+      </div>
 
       {/* Sparkline */}
       <div className="mt-1">

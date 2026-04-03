@@ -52,6 +52,8 @@ struct DetViz {
     template: Vec<i32>,     // 784 template current values (the imprint)
     eval_accuracy: f32,
     confidence_history: Vec<i64>,
+    thermals: Vec<u8>,      // 784 temperature values (0-255, HOT→COLD)
+    activations: Vec<u8>,   // 784 activation intensities (0-255, decays over time)
 }
 
 #[derive(Serialize, Clone)]
@@ -80,6 +82,7 @@ struct Detector {
     eval_correct: u32,
     eval_total: u32,
     confidence_history: Vec<i64>,
+    activations: Vec<u8>,   // 784 activation glow values, decayed each poll
 }
 
 impl Detector {
@@ -95,7 +98,7 @@ impl Detector {
         evaluator.eval_with_engine(&program, &engine).unwrap();
         Self { evaluator, engine, digit, runtime, phase: Phase::Cold,
                imprint_count: 0, eval_correct: 0, eval_total: 0,
-               confidence_history: Vec::new() }
+               confidence_history: Vec::new(), activations: vec![0u8; 784] }
     }
 
     fn imprint_sample(&mut self, input: &[Value]) {
@@ -139,6 +142,39 @@ impl Detector {
         }
     }
 
+    fn get_thermals(&self) -> Vec<u8> {
+        let rt = self.runtime.lock().unwrap();
+        let key = format!("d{}.template", self.digit);
+        if let Some(twm) = rt.thermal_weights_by_key(&key) {
+            twm.data.iter().take(784).map(|tw| tw.temperature).collect()
+        } else {
+            vec![0; 784]
+        }
+    }
+
+    /// Mark activation from correlation output — which weights actually spiked.
+    /// Uses the correlation result (output signals), not the input.
+    fn mark_activations_from_correlation(&mut self, correlation: &Value) {
+        if let Value::Array(arr) = correlation {
+            for (i, v) in arr.iter().enumerate().take(784) {
+                if let Value::Integer(n) = v {
+                    // Positive polarity + high magnitude = spike
+                    if *n > 0 {
+                        let intensity = ((*n).min(60) * 255 / 60) as u8;
+                        self.activations[i] = self.activations[i].max(intensity);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Decay all activations toward zero (phosphor fade).
+    fn decay_activations(&mut self) {
+        for a in &mut self.activations {
+            *a = a.saturating_sub(40); // ~6 polls to fully decay from 255
+        }
+    }
+
     fn get_viz(&self) -> DetViz {
         DetViz {
             digit: self.digit,
@@ -146,6 +182,8 @@ impl Detector {
             template: self.get_template(),
             eval_accuracy: if self.eval_total > 0 { self.eval_correct as f32 / self.eval_total as f32 } else { 0.0 },
             confidence_history: self.confidence_history.clone(),
+            thermals: self.get_thermals(),
+            activations: self.activations.clone(),
         }
     }
 
@@ -294,10 +332,13 @@ fn handle_cmd(
             for &(img_idx, label) in &train_set {
                 let encoded = encode_image(&train.images[img_idx].pixels);
 
-                // Get 10 correlation maps
+                // Get 10 correlation maps + mark activations from output
                 let correlations: Vec<Value> = detectors.iter_mut()
                     .map(|d| d.correlate(&encoded))
                     .collect();
+                for (d, c) in detectors.iter_mut().zip(correlations.iter()) {
+                    d.mark_activations_from_correlation(c);
+                }
                 let combined = concat_correlations(&correlations);
 
                 // Train finalizer
@@ -333,10 +374,13 @@ fn handle_cmd(
                 let encoded = encode_image(&img.pixels);
                 let label = img.label as usize;
 
-                // Correlations
+                // Correlations + mark activations from output
                 let correlations: Vec<Value> = detectors.iter_mut()
                     .map(|d| d.correlate(&encoded))
                     .collect();
+                for (d, c) in detectors.iter_mut().zip(correlations.iter()) {
+                    d.mark_activations_from_correlation(c);
+                }
 
                 // Scalar confidences for viz
                 let scalar_confs: Vec<i64> = correlations.iter().map(|c| {
@@ -459,6 +503,10 @@ fn main() {
                     .with_header(Header::from_bytes("Content-Type", "text/html").unwrap()));
             }
             (_, "/api/state") => {
+                // Decay activations and refresh detector state each poll
+                for d in detectors.iter_mut() { d.decay_activations(); }
+                state.lock().unwrap().detectors = detectors.iter().map(|d| d.get_viz()).collect();
+
                 let s = state.lock().unwrap().clone();
                 let json = serde_json::to_string(&s).unwrap_or_else(|_| "{}".into());
                 let _ = request.respond(Response::from_string(json).with_header(json_ct).with_header(cors));
