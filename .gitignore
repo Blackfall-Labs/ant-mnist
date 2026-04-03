@@ -1,2 +1,5 @@
 /target
 /data
+/checkpoints
+dashboard/node_modules
+dashboard/dist

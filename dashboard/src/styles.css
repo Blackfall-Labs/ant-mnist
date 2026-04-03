@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+:root {
+  --bg-primary: #0a0a0a;
+  --bg-secondary: #111111;
+  --bg-tertiary: #1a1a1a;
+  --border: #333333;
+  --text-primary: #c0c0c0;
+  --text-secondary: #888888;
+  --text-dim: #555555;
+  --accent-orange: #ff6b35;
+  --accent-green: #4caf50;
+  --accent-red: #f44336;
+  --accent-blue: #4488ff;
+  --accent-gold: #ffd700;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 12px;
+  overflow: hidden;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+canvas {
+  display: block;
+  image-rendering: pixelated;
+}
