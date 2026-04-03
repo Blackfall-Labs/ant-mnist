@@ -54,8 +54,8 @@ end
 #
 # Config: [threshold=100, decay=1, gate=10, cooling=500, warming=10, warming_thresh=20]
 #   - High threshold (100): 784 inputs accumulate pressure fast, need high bar to prevent oscillation
-#   - Cooling (20): weights cool visibly within a few training cycles
-#   - Moderate warming (10/20): stuck cool weights can recover if under sustained pressure
+#   - Cooling (50): weights cool steadily but don't freeze prematurely
+#   - Warming (15/30): cool weights recover under sustained pressure, preventing brittle early lock-in
 def train(input, is_mine) do
   template = thermal_load_synaptic(prefix + ".template", 1, 784)
   output = thermal_matmul(input, template)
@@ -66,7 +66,7 @@ def train(input, is_mine) do
   end
 
   thermal_mastery_update(template, input, output, target, is_mine,
-    [100, 1, 10, 20, 10, 20])
+    [100, 1, 10, 50, 15, 30])
 end
 
 # Scalar confidence: sum of absolute correlation values.

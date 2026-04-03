@@ -327,6 +327,65 @@ fn log_msg(state: &Arc<Mutex<ControlState>>, msg: String) {
     if s.log.len() > 50 { s.log.truncate(50); }
 }
 
+/// Compute scalar confidence per detector (sum of absolute correlation values).
+fn scalar_confidences(correlations: &[Value]) -> Vec<i64> {
+    correlations.iter().map(|c| {
+        if let Value::Array(arr) = c {
+            arr.iter().map(|v| if let Value::Integer(n) = v { n.abs() } else { 0 }).sum::<i64>()
+        } else { 0 }
+    }).collect()
+}
+
+/// Cross-ANT inhibition: suppress losing detectors' correlations.
+/// Winner passes at full strength. Others are scaled down proportional
+/// to how much weaker they are than the winner.
+fn inhibit_correlations(correlations: &mut Vec<Value>, confs: &[i64]) {
+    let max_conf = *confs.iter().max().unwrap_or(&1);
+    if max_conf == 0 { return; }
+
+    for (i, corr) in correlations.iter_mut().enumerate() {
+        let scale = confs[i] as f64 / max_conf as f64;
+        // Winner gets scale=1.0, others get proportionally less.
+        // Square the scale to make suppression more aggressive.
+        let scale = scale * scale;
+
+        if scale < 0.99 {
+            if let Value::Array(arr) = corr {
+                let inhibited: Vec<Value> = arr.iter().map(|v| {
+                    if let Value::Integer(n) = v {
+                        Value::Integer((*n as f64 * scale) as i64)
+                    } else {
+                        v.clone()
+                    }
+                }).collect();
+                *corr = Value::Array(Arc::new(inhibited));
+            }
+        }
+    }
+}
+
+/// Normalize each detector's 784 correlation signals to a consistent scale.
+/// Divides each signal by the detector's max absolute value, then scales to [-60, 60].
+/// This ensures the finalizer sees signals on the same scale regardless of detector magnitude.
+fn normalize_correlations(correlations: &mut Vec<Value>) {
+    for corr in correlations.iter_mut() {
+        if let Value::Array(arr) = corr {
+            let max_abs = arr.iter().map(|v| {
+                if let Value::Integer(n) = v { n.abs() } else { 0 }
+            }).max().unwrap_or(1).max(1);
+
+            let normalized: Vec<Value> = arr.iter().map(|v| {
+                if let Value::Integer(n) = v {
+                    Value::Integer(*n * 60 / max_abs)
+                } else {
+                    v.clone()
+                }
+            }).collect();
+            *corr = Value::Array(Arc::new(normalized));
+        }
+    }
+}
+
 /// Concatenate 10 correlation arrays into one 7840-element array
 fn concat_correlations(corrs: &[Value]) -> Value {
     let mut all = Vec::with_capacity(7840);
@@ -344,6 +403,20 @@ fn concat_correlations(corrs: &[Value]) -> Value {
 
 #[derive(Deserialize)]
 struct Cmd { action: String, #[serde(default)] digit: Option<usize>, #[serde(default)] count: Option<usize> }
+
+/// Auto-training curriculum state.
+struct Curriculum {
+    remaining_cycles: u32,
+    per_digit: usize,       // alternates between 50 and 200
+    eval_every: u32,        // eval after this many cycles
+    cycle_in_batch: u32,
+}
+
+impl Curriculum {
+    fn new(total_cycles: u32) -> Self {
+        Self { remaining_cycles: total_cycles, per_digit: 50, eval_every: 3, cycle_in_batch: 0 }
+    }
+}
 
 fn handle_cmd(
     cmd: &Cmd,
@@ -411,10 +484,14 @@ fn handle_cmd(
                     d.train_sample(&encoded, is_mine);
                 }
 
-                // Get 10 correlation maps + mark activations from output
-                let correlations: Vec<Value> = detectors.iter_mut()
+                // Get 10 correlation maps + inhibit losers + normalize
+                let mut correlations: Vec<Value> = detectors.iter_mut()
                     .map(|d| d.correlate(&encoded))
                     .collect();
+                let confs = scalar_confidences(&correlations);
+                inhibit_correlations(&mut correlations, &confs);
+                normalize_correlations(&mut correlations);
+
                 for (d, c) in detectors.iter_mut().zip(correlations.iter()) {
                     d.mark_activations_from_correlation(c);
                 }
@@ -422,7 +499,20 @@ fn handle_cmd(
 
                 // Train finalizer
                 let pred = finalizer.train(&combined, label as usize);
-                if pred == label as usize { correct += 1; }
+                if pred == label as usize {
+                    correct += 1;
+                } else {
+                    // Negative reinforcement: penalize the winning detector if it was wrong.
+                    // The detector that had highest confidence led to a wrong prediction —
+                    // train it with is_mine=false to weaken its response to this input.
+                    let winner = confs.iter().enumerate()
+                        .max_by_key(|(_, c)| *c)
+                        .map(|(i, _)| i)
+                        .unwrap_or(0);
+                    if winner != label as usize {
+                        detectors[winner].train_sample(&encoded, false);
+                    }
+                }
             }
 
             // Decay pressure on all detectors + finalizer
@@ -456,20 +546,17 @@ fn handle_cmd(
                 let encoded = encode_image(&img.pixels);
                 let label = img.label as usize;
 
-                // Correlations + mark activations from output
-                let correlations: Vec<Value> = detectors.iter_mut()
+                // Correlations + inhibit losers + normalize + mark activations
+                let mut correlations: Vec<Value> = detectors.iter_mut()
                     .map(|d| d.correlate(&encoded))
                     .collect();
+                let scalar_confs = scalar_confidences(&correlations);
+                inhibit_correlations(&mut correlations, &scalar_confs);
+                normalize_correlations(&mut correlations);
+
                 for (d, c) in detectors.iter_mut().zip(correlations.iter()) {
                     d.mark_activations_from_correlation(c);
                 }
-
-                // Scalar confidences for viz
-                let scalar_confs: Vec<i64> = correlations.iter().map(|c| {
-                    if let Value::Array(arr) = c {
-                        arr.iter().map(|v| if let Value::Integer(n) = v { n.abs() } else { 0 }).sum::<i64>()
-                    } else { 0 }
-                }).collect();
 
                 let combined = concat_correlations(&correlations);
                 let predicted = finalizer.predict(&combined);
@@ -546,6 +633,23 @@ fn handle_cmd(
             log_msg(state, "Reset: all detectors flushed, finalizer rebuilt, counters zeroed".into());
         }
 
+        "auto_train" => {
+            // Auto curriculum: imprint if needed, then run N cycles alternating 50/200
+            let total = cmd.count.unwrap_or(100) as u32;
+
+            // Auto-imprint if detectors are cold
+            if detectors[0].phase == Phase::Cold {
+                let imprint_cmd = Cmd { action: "imprint".into(), digit: None, count: Some(50) };
+                handle_cmd(&imprint_cmd, detectors, finalizer, train, test, state);
+            }
+
+            log_msg(state, format!("Auto-train: starting {} cycles", total));
+        }
+
+        "stop" => {
+            log_msg(state, "Stopped auto-train".into());
+        }
+
         _ => log_msg(state, format!("Unknown: {}", cmd.action)),
     }
 }
@@ -583,7 +687,18 @@ fn main() {
     eprintln!("  Dashboard: http://localhost:{}", port);
     eprintln!("\n  Ready. 10 detectors COLD. Finalizer COLD.\n");
 
-    for mut request in server.incoming_requests() {
+    let mut curriculum: Option<Curriculum> = None;
+
+    loop {
+        // Process HTTP requests (non-blocking when auto-training)
+        let timeout = if curriculum.is_some() {
+            std::time::Duration::from_millis(10)
+        } else {
+            std::time::Duration::from_secs(60)
+        };
+        let maybe_request = server.recv_timeout(timeout).ok().flatten();
+
+        if let Some(mut request) = maybe_request {
         let url = request.url().to_string();
         let method = request.method().clone();
         let cors = Header::from_bytes("Access-Control-Allow-Origin", "*").unwrap();
@@ -612,7 +727,25 @@ fn main() {
                 let mut body = String::new();
                 request.as_reader().read_to_string(&mut body).ok();
                 let resp = if let Ok(cmd) = serde_json::from_str::<Cmd>(&body) {
-                    handle_cmd(&cmd, &mut detectors, &mut finalizer, &train, &test, &state);
+                    // Intercept auto_train/stop to manage curriculum
+                    match cmd.action.as_str() {
+                        "auto_train" => {
+                            let total = cmd.count.unwrap_or(100) as u32;
+                            if detectors[0].phase == Phase::Cold {
+                                let imprint_cmd = Cmd { action: "imprint".into(), digit: None, count: Some(50) };
+                                handle_cmd(&imprint_cmd, &mut detectors, &mut finalizer, &train, &test, &state);
+                            }
+                            curriculum = Some(Curriculum::new(total));
+                            log_msg(&state, format!("Auto-train: starting {} cycles", total));
+                        }
+                        "stop" => {
+                            curriculum = None;
+                            log_msg(&state, "Stopped auto-train".into());
+                        }
+                        _ => {
+                            handle_cmd(&cmd, &mut detectors, &mut finalizer, &train, &test, &state);
+                        }
+                    }
                     Response::from_string(r#"{"ok":true}"#).with_header(json_ct).with_header(cors)
                 } else {
                     Response::from_string(r#"{"error":"bad json"}"#)
@@ -622,5 +755,28 @@ fn main() {
             }
             _ => { let _ = request.respond(Response::from_string("404").with_status_code(404).with_header(cors)); }
         }
-    }
+        } // end if let Some(request)
+
+        // Auto-training step: run one cycle if curriculum is active
+        if let Some(ref mut cur) = curriculum {
+            if cur.remaining_cycles == 0 {
+                log_msg(&state, "Auto-train: complete".into());
+                curriculum = None;
+            } else {
+                // Alternate between 50 and 200 per digit
+                let per_digit = if cur.cycle_in_batch % 2 == 0 { 50 } else { 200 };
+                let train_cmd = Cmd { action: "train_cycle".into(), digit: None, count: Some(per_digit) };
+                handle_cmd(&train_cmd, &mut detectors, &mut finalizer, &train, &test, &state);
+
+                cur.remaining_cycles -= 1;
+                cur.cycle_in_batch += 1;
+
+                // Eval periodically
+                if cur.cycle_in_batch % cur.eval_every == 0 {
+                    let eval_cmd = Cmd { action: "evaluate".into(), digit: None, count: Some(1000) };
+                    handle_cmd(&eval_cmd, &mut detectors, &mut finalizer, &train, &test, &state);
+                }
+            }
+        }
+    } // end loop
 }

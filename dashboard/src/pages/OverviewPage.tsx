@@ -23,6 +23,10 @@ export function OverviewPage() {
         <CmdBtn label="Train Cycle (200/digit)" onClick={() => sendCmd("train_cycle", undefined, 200)} cls="action" />
         <CmdBtn label="Evaluate (1000)" onClick={() => sendCmd("evaluate", undefined, 1000)} />
         <CmdBtn label="Freeze All" onClick={() => sendCmd("freeze")} cls="freeze" />
+        <span className="border-l border-gray-700 mx-1 h-4" />
+        <CmdBtn label="Auto-Train (100)" onClick={() => sendCmd("auto_train", undefined, 100)} cls="action" />
+        <CmdBtn label="Auto-Train (500)" onClick={() => sendCmd("auto_train", undefined, 500)} cls="action" />
+        <CmdBtn label="Stop" onClick={() => sendCmd("stop")} cls="freeze" />
         <CmdBtn label="Reset All" onClick={() => sendCmd("reset")} cls="danger" />
       </div>
 
