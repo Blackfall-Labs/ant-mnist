@@ -1,17 +1,23 @@
 meta {
   name "mnist_classifier"
-  version 1
+  version 2
   description "MNIST digit classification with thermal mastery learning"
 }
 use :ant_ml
 use :mnist
 
 # Architecture: 784 → 300 → 100 → 10
-# Three thermal synaptic regions, all learning.
+# W1, W2 frozen random projections. W3 learned via thermal mastery.
+#
+# Pressure math for W3 (10×100):
+#   ~25 active inputs per sample (top 25% of 100 hidden neurons)
+#   activity_strength: up to 15
+#   error_mag: 1-2
+#   max pressure per sample: ~750
+#   threshold 500 → requires sustained agreement over multiple samples
+#   participation gate 100 → must see 100 samples before learning
 
 def build_network() do
-  # All regions start HOT with random initialization.
-  # Config: [threshold, decay, gate, cooling_rate, warming_step, warming_threshold]
   thermal_load_synaptic("w1", 300, 784, 42)
   thermal_load_synaptic("w2", 100, 300, 7919)
   thermal_load_synaptic("w3", 10, 100, 104729)
@@ -49,27 +55,26 @@ def train_step(input, label) do
   correct = predicted == label
 
   # Target: correct class excitatory, others inhibitory
-  target = onehot(label, 10, 60, 40)
-  out_c = clamp(out, -60, 60)
+  # Moderate magnitudes to avoid saturation
+  target = onehot(label, 10, 40, 20)
+  out_c = clamp(out, -40, 40)
 
-  # Output region mastery
+  # Output region mastery — only W3 learns for now
   # Config: [threshold, decay, gate, cooling, warming_step, warming_threshold]
-  thermal_mastery_update(w3, h2, out_c, target, correct, [10, 1, 5, 200, 10, 20])
-
-  # Hidden 2 target: derived from output error × output weight signs
-  # For now, only train output region until mastery algorithm is proven
-  # TODO: hidden target derivation after output region converges
+  #   threshold 500: needs sustained pressure over multiple samples (max ~750/sample)
+  #   decay 10: moderate per-cycle decay, prevents stale pressure
+  #   gate 100: must participate in 100 samples before learning
+  #   cooling 500: slow cooling, 500 hits per degree
+  #   warming_step 5: gentle re-warming on sustained error
+  #   warming_threshold 1000: large pressure accumulation needed to warm back up
+  thermal_mastery_update(w3, h2, out_c, target, correct, [500, 10, 100, 500, 5, 1000])
 
   predicted
 end
 
 def decay_all() do
-  w1 = thermal_load_synaptic("w1", 300, 784, 42)
-  w2 = thermal_load_synaptic("w2", 100, 300, 7919)
   w3 = thermal_load_synaptic("w3", 10, 100, 104729)
   thermal_decay(w3)
-  # thermal_decay(w2)  # uncomment when hidden mastery is enabled
-  # thermal_decay(w1)
 end
 
 main do
@@ -82,10 +87,10 @@ main do
 
   build_network()
 
-  # Baseline evaluation
+  # Baseline evaluation (first 1000 test images for speed)
   print("\n--- Baseline (random strengths) ---")
   correct = 0
-  n_test.times do |i|
+  1000.times do |i|
     sample = get_sample(test_data, i)
     input = slice(sample, 0, 784)
     label = slice(sample, 784, 1)
@@ -95,10 +100,10 @@ main do
       correct = correct + 1
     end
   end
-  print("Baseline: ", correct, "/", n_test)
+  print("Baseline: ", correct, "/1000")
 
-  # Training: 5 cycles
-  5.times do |cycle|
+  # Training: 40 cycles
+  40.times do |cycle|
     train_correct = 0
     n_train.times do |i|
       sample = get_sample(train_data, i)
@@ -112,9 +117,9 @@ main do
     end
     decay_all()
 
-    # Evaluate
+    # Evaluate on first 1000 test images
     test_correct = 0
-    n_test.times do |i|
+    1000.times do |i|
       sample = get_sample(test_data, i)
       input = slice(sample, 0, 784)
       label = slice(sample, 784, 1)
@@ -125,7 +130,7 @@ main do
       end
     end
 
-    print("Cycle ", cycle + 1, ": train ", train_correct, "/", n_train, ", test ", test_correct, "/", n_test)
+    print("Cycle ", cycle + 1, ": train ", train_correct, "/", n_train, ", test ", test_correct, "/1000")
 
     # Thermal summary
     w3 = thermal_load_synaptic("w3", 10, 100, 104729)

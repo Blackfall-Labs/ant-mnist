@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html><head>
+<title>ANT-MNIST Specialist Detectors</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a0a0a; color: #e0e0e0; font-family: 'Consolas', monospace; font-size: 13px; padding: 10px; }
+h1 { color: #ff6b35; margin-bottom: 8px; font-size: 18px; }
+h2 { color: #888; font-size: 14px; margin: 8px 0 4px; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; }
+.panel { background: #151515; border: 1px solid #333; border-radius: 4px; padding: 8px; margin-bottom: 8px; }
+.controls { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+button { background: #333; color: #e0e0e0; border: 1px solid #555; padding: 4px 12px; cursor: pointer; border-radius: 3px; }
+button:hover { background: #444; }
+button.active { background: #ff6b35; color: #000; }
+.stat { display: inline-block; margin-right: 15px; }
+.stat .label { color: #888; }
+.stat .value { color: #fff; font-weight: bold; }
+.stat .value.good { color: #4caf50; }
+.stat .value.bad { color: #f44336; }
+
+/* Detector grid */
+.detector-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.detector-card { background: #1a1a1a; border: 1px solid #333; border-radius: 3px; padding: 6px; }
+.detector-card h3 { font-size: 13px; color: #ff6b35; margin-bottom: 4px; }
+.weight-bar { display: flex; height: 12px; margin: 2px 0; }
+.weight-cell { flex: 1; min-width: 1px; }
+
+/* Sample grid */
+.sample-grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; }
+.sample-card { text-align: center; padding: 3px; border-radius: 3px; }
+.sample-card.correct { background: #1a2e1a; border: 1px solid #2e5e2e; }
+.sample-card.wrong { background: #2e1a1a; border: 1px solid #5e2e2e; }
+.sample-canvas { image-rendering: pixelated; }
+.confidence-bars { display: flex; height: 30px; gap: 1px; margin-top: 2px; }
+.conf-bar { flex: 1; position: relative; }
+.conf-fill { position: absolute; bottom: 0; width: 100%; background: #444; }
+.conf-fill.winner { background: #ff6b35; }
+.conf-fill.correct-class { background: #4caf50; }
+
+/* History chart */
+#historyChart { width: 100%; height: 120px; background: #111; border: 1px solid #333; }
+</style>
+</head><body>
+
+<h1>ANT-MNIST: 10 Specialist Detectors</h1>
+
+<div class="controls">
+  <button id="startBtn" onclick="start()">Start</button>
+  <button id="stopBtn" onclick="stop()">Stop</button>
+  <span class="stat"><span class="label">Cycle: </span><span class="value" id="cycle">0</span></span>
+  <span class="stat"><span class="label">Step: </span><span class="value" id="step">0</span></span>
+  <span class="stat"><span class="label">Test: </span><span class="value" id="testAcc">-</span></span>
+  <span class="stat"><span class="label">Best: </span><span class="value good" id="bestAcc">-</span></span>
+</div>
+
+<div class="row">
+  <div class="panel" style="flex:1">
+    <h2>Detector Weights (colored by thermal state)</h2>
+    <div class="detector-grid" id="detectorGrid"></div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="panel" style="flex:1">
+    <h2>Sample Predictions (consensus of 10 detectors)</h2>
+    <div class="sample-grid" id="sampleGrid"></div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="panel" style="flex:1">
+    <h2>Accuracy History</h2>
+    <canvas id="historyChart"></canvas>
+  </div>
+</div>
+
+<script>
+const API = '';
+let state = {};
+
+function start() { fetch(API + '/api/start'); }
+function stop() { fetch(API + '/api/stop'); }
+
+function tempColor(temp) {
+  if (temp >= 192) return '#ff4444'; // HOT - red
+  if (temp >= 128) return '#ff8844'; // WARM - orange
+  if (temp >= 64) return '#4488ff';  // COOL - blue
+  return '#ffffff';                   // COLD - white
+}
+
+function weightColor(current, temp) {
+  const alpha = Math.min(1, Math.abs(current) / 5000);
+  const tc = tempColor(temp);
+  if (current > 0) return tc;
+  if (current < 0) return tc;
+  return '#222';
+}
+
+function renderDetectors(detectors) {
+  const grid = document.getElementById('detectorGrid');
+  grid.innerHTML = '';
+  for (const d of detectors) {
+    const card = document.createElement('div');
+    card.className = 'detector-card';
+
+    let html = `<h3>Digit ${d.digit}</h3>`;
+
+    // Weight bar
+    html += '<div class="weight-bar">';
+    const n = d.weight_currents.length;
+    for (let i = 0; i < n; i++) {
+      const c = d.weight_currents[i];
+      const t = d.weight_temps ? d.weight_temps[i] : 255;
+      const bg = weightColor(c, t);
+      const intensity = Math.min(1, Math.abs(c) / 2000);
+      html += `<div class="weight-cell" style="background:${bg};opacity:${0.3 + intensity * 0.7}" title="w[${i}]=${c} t=${t}"></div>`;
+    }
+    html += '</div>';
+
+    // Pressure bar
+    if (d.weight_pressures && d.weight_pressures.length > 0) {
+      html += '<div class="weight-bar" style="height:6px;margin-top:1px">';
+      for (let i = 0; i < d.weight_pressures.length; i++) {
+        const p = d.weight_pressures[i];
+        const bg = p > 0 ? '#4caf50' : p < 0 ? '#f44336' : '#222';
+        const intensity = Math.min(1, Math.abs(p) / 500);
+        html += `<div class="weight-cell" style="background:${bg};opacity:${0.2 + intensity * 0.8}" title="p[${i}]=${p}"></div>`;
+      }
+      html += '</div>';
+    }
+
+    card.innerHTML = html;
+    grid.appendChild(card);
+  }
+}
+
+function renderSamples(samples) {
+  const grid = document.getElementById('sampleGrid');
+  grid.innerHTML = '';
+  for (const s of samples) {
+    const card = document.createElement('div');
+    card.className = 'sample-card ' + (s.correct ? 'correct' : 'wrong');
+
+    // Draw digit
+    const canvas = document.createElement('canvas');
+    canvas.width = 28; canvas.height = 28;
+    canvas.className = 'sample-canvas';
+    canvas.style.width = '56px'; canvas.style.height = '56px';
+    const ctx = canvas.getContext('2d');
+    const img = ctx.createImageData(28, 28);
+    for (let i = 0; i < 784; i++) {
+      const v = s.pixels[i];
+      img.data[i*4] = v; img.data[i*4+1] = v; img.data[i*4+2] = v; img.data[i*4+3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+
+    card.appendChild(canvas);
+
+    // Label
+    const label = document.createElement('div');
+    label.style.fontSize = '11px';
+    label.innerHTML = `<span style="color:#888">true:</span>${s.label} <span style="color:#888">pred:</span><span style="color:${s.correct?'#4caf50':'#f44336'}">${s.predicted}</span>`;
+    card.appendChild(label);
+
+    // Confidence bars
+    const bars = document.createElement('div');
+    bars.className = 'confidence-bars';
+    const maxConf = Math.max(1, ...s.confidences.map(c => Math.abs(c)));
+    for (let i = 0; i < 10; i++) {
+      const bar = document.createElement('div');
+      bar.className = 'conf-bar';
+      bar.title = `d${i}: ${s.confidences[i]}`;
+      const fill = document.createElement('div');
+      fill.className = 'conf-fill';
+      if (i === s.predicted) fill.classList.add('winner');
+      if (i === s.label) fill.classList.add('correct-class');
+      const h = Math.abs(s.confidences[i]) / maxConf * 100;
+      fill.style.height = h + '%';
+      if (s.confidences[i] < 0) fill.style.opacity = '0.4';
+      bar.appendChild(fill);
+      bars.appendChild(bar);
+    }
+    card.appendChild(bars);
+
+    grid.appendChild(card);
+  }
+}
+
+function renderHistory(history) {
+  const canvas = document.getElementById('historyChart');
+  const ctx = canvas.getContext('2d');
+  canvas.width = canvas.clientWidth;
+  canvas.height = 120;
+  ctx.fillStyle = '#111';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  if (history.length < 2) return;
+
+  const w = canvas.width;
+  const h = canvas.height;
+  const maxAcc = 1.0;
+
+  ctx.strokeStyle = '#ff6b35';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let i = 0; i < history.length; i++) {
+    const x = (i / (history.length - 1)) * w;
+    const y = h - (history[i].test_acc / maxAcc) * h;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // Grid lines
+  ctx.strokeStyle = '#333';
+  ctx.lineWidth = 0.5;
+  for (const pct of [0.1, 0.25, 0.5, 0.75, 0.9]) {
+    const y = h - pct * h;
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+    ctx.fillStyle = '#555'; ctx.fillText((pct*100).toFixed(0)+'%', 2, y-2);
+  }
+}
+
+async function poll() {
+  try {
+    const resp = await fetch(API + '/api/state');
+    state = await resp.json();
+
+    document.getElementById('cycle').textContent = state.cycle || 0;
+    document.getElementById('step').textContent = state.step || 0;
+    document.getElementById('testAcc').textContent = state.test_acc ? (state.test_acc * 100).toFixed(1) + '%' : '-';
+    document.getElementById('bestAcc').textContent = state.best_test_acc ? (state.best_test_acc * 100).toFixed(1) + '%' : '-';
+
+    if (state.detectors) renderDetectors(state.detectors);
+    if (state.samples) renderSamples(state.samples);
+    if (state.history) renderHistory(state.history);
+  } catch(e) {}
+}
+
+setInterval(poll, 1000);
+poll();
+</script>
+</body></html>

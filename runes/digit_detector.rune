@@ -1,0 +1,47 @@
+meta {
+  name "digit_detector"
+  version 1
+  description "Binary digit detector — answers 'is this digit N?' with confidence"
+}
+use :ant_ml
+
+# Architecture: 784 → 48 → 1
+# Frozen random projection + learned binary output.
+# Each detector instance gets its own synaptic key prefix
+# passed via the 'prefix' variable set by the host.
+
+def forward(input) do
+  w_hidden = load_synaptic_frozen(prefix + ".w_hidden", 48, 784)
+  w_out = load_synaptic(prefix + ".w_out", 1, 48)
+
+  h = matmul(input, w_hidden)
+  h = relu(h)
+  matmul(h, w_out)
+end
+
+def train(input, is_match) do
+  w_hidden = load_synaptic_frozen(prefix + ".w_hidden", 48, 784)
+  w_out = load_synaptic(prefix + ".w_out", 1, 48)
+
+  h = matmul(input, w_hidden)
+  h = relu(h)
+  out = matmul(h, w_out)
+  out_c = clamp(out, -127, 127)
+
+  # Binary target: asymmetric to compensate 9:1 class imbalance.
+  # +120 for match (strong excitatory), -13 for non-match (weak inhibitory).
+  # Ratio ~9:1 matches the 54000:6000 negative:positive sample ratio.
+  target_val = is_match * 133 - 13
+  # Config: [threshold, decay, gate]
+  # W_out is 1×48: ~12 active hidden neurons
+  # Positive pressure per match sample: ~12 × 15 × (120/32≈4) = ~720
+  # Negative pressure per non-match: ~12 × 15 × (13/32≈1) = ~180
+  # threshold 100: fires on strong match, takes ~6 non-matches to fire
+  mastery_update(w_out, h, out_c, [target_val], [100, 3, 20])
+  out
+end
+
+def decay() do
+  w_out = load_synaptic(prefix + ".w_out", 1, 48)
+  mastery_decay(w_out)
+end
