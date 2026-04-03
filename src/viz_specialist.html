@@ -1,242 +1,309 @@
 <!DOCTYPE html>
 <html><head>
-<title>ANT-MNIST Specialist Detectors</title>
+<title>ANT-MNIST Control Room</title>
 <style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { background: #0a0a0a; color: #e0e0e0; font-family: 'Consolas', monospace; font-size: 13px; padding: 10px; }
-h1 { color: #ff6b35; margin-bottom: 8px; font-size: 18px; }
-h2 { color: #888; font-size: 14px; margin: 8px 0 4px; }
-.row { display: flex; gap: 10px; flex-wrap: wrap; }
-.panel { background: #151515; border: 1px solid #333; border-radius: 4px; padding: 8px; margin-bottom: 8px; }
-.controls { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
-button { background: #333; color: #e0e0e0; border: 1px solid #555; padding: 4px 12px; cursor: pointer; border-radius: 3px; }
-button:hover { background: #444; }
-button.active { background: #ff6b35; color: #000; }
-.stat { display: inline-block; margin-right: 15px; }
-.stat .label { color: #888; }
-.stat .value { color: #fff; font-weight: bold; }
-.stat .value.good { color: #4caf50; }
-.stat .value.bad { color: #f44336; }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#0a0a0a; color:#ddd; font-family:'Consolas',monospace; font-size:12px; padding:8px; }
+h1 { color:#ff6b35; font-size:16px; margin-bottom:4px; }
+h2 { color:#888; font-size:12px; margin:4px 0 2px; border-bottom:1px solid #222; }
+button { background:#282828; color:#ddd; border:1px solid #444; padding:3px 8px; cursor:pointer; border-radius:2px; font:inherit; font-size:11px; margin:1px; }
+button:hover { background:#383838; }
+button.danger { border-color:#822; }
+button.danger:hover { background:#411; }
+button.action { border-color:#484; }
+button.action:hover { background:#143; }
+button.freeze-btn { border-color:#448; }
+button.freeze-btn:hover { background:#114; }
+.controls { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-bottom:6px; padding:4px; background:#111; border:1px solid #222; border-radius:3px; }
+.stat { margin-right:10px; }
+.stat .l { color:#555; }
+.stat .v { color:#fff; }
+.stat .v.g { color:#4caf50; }
+.panel { background:#111; border:1px solid #222; border-radius:3px; padding:5px; margin-bottom:5px; }
+.row { display:flex; gap:5px; }
+.col { flex:1; min-width:0; }
 
-/* Detector grid */
-.detector-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
-.detector-card { background: #1a1a1a; border: 1px solid #333; border-radius: 3px; padding: 6px; }
-.detector-card h3 { font-size: 13px; color: #ff6b35; margin-bottom: 4px; }
-.weight-bar { display: flex; height: 12px; margin: 2px 0; }
-.weight-cell { flex: 1; min-width: 1px; }
+.det-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:4px; }
+.det-card { background:#161616; border:1px solid #282828; border-radius:3px; padding:4px; position:relative; }
+.det-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:3px; }
+.det-header h3 { font-size:12px; color:#ff6b35; }
+.det-header .acc { font-weight:bold; }
+.phase-badge { font-size:9px; padding:1px 4px; border-radius:2px; text-transform:uppercase; }
+.phase-Cold { background:#333; color:#888; }
+.phase-Imprinting { background:#553300; color:#ffaa33; }
+.phase-Training { background:#004400; color:#44ff44; }
+.phase-Frozen { background:#003355; color:#66aaff; }
+.det-controls { display:flex; gap:2px; margin:3px 0; }
+.det-controls button { font-size:10px; padding:1px 5px; }
+.heatmap { image-rendering:pixelated; border:1px solid #333; }
+.examples { display:flex; gap:2px; align-items:center; margin:2px 0; }
+.examples span { font-size:9px; width:22px; }
+.ex-img { image-rendering:pixelated; border:1px solid #333; }
+.ex-img.ok { border-color:#4caf50; }
+.ex-img.miss { border-color:#f44336; }
+.bar-row { display:flex; gap:2px; margin:1px 0; align-items:center; }
+.bar-label { font-size:9px; color:#555; width:16px; }
+.bar { display:flex; height:8px; flex:1; background:#0a0a0a; border-radius:1px; overflow:hidden; }
+.bar-cell { flex:1; min-width:0; }
+.sparkline { width:100%; height:16px; display:block; }
 
-/* Sample grid */
-.sample-grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; }
-.sample-card { text-align: center; padding: 3px; border-radius: 3px; }
-.sample-card.correct { background: #1a2e1a; border: 1px solid #2e5e2e; }
-.sample-card.wrong { background: #2e1a1a; border: 1px solid #5e2e2e; }
-.sample-canvas { image-rendering: pixelated; }
-.confidence-bars { display: flex; height: 30px; gap: 1px; margin-top: 2px; }
-.conf-bar { flex: 1; position: relative; }
-.conf-fill { position: absolute; bottom: 0; width: 100%; background: #444; }
-.conf-fill.winner { background: #ff6b35; }
-.conf-fill.correct-class { background: #4caf50; }
+.sample-grid { display:grid; grid-template-columns:repeat(10,1fr); gap:3px; }
+.sample-card { text-align:center; padding:2px; border-radius:2px; }
+.sample-card.correct { background:#1a2a1a; border:1px solid #2a4a2a; }
+.sample-card.wrong { background:#2a1a1a; border:1px solid #4a2a2a; }
+.sample-canvas { image-rendering:pixelated; }
+.conf-bars { display:flex; height:20px; gap:1px; margin-top:1px; }
+.conf-bar { flex:1; display:flex; flex-direction:column; justify-content:flex-end; }
+.conf-fill { width:100%; }
 
-/* History chart */
-#historyChart { width: 100%; height: 120px; background: #111; border: 1px solid #333; }
+.confusion td { width:22px; height:16px; text-align:center; font-size:8px; border:1px solid #1a1a1a; }
+.confusion th { color:#666; font-size:8px; padding:0 2px; }
+canvas.chart { width:100%; height:90px; background:#0e0e0e; border:1px solid #222; display:block; }
 </style>
 </head><body>
 
-<h1>ANT-MNIST: 10 Specialist Detectors</h1>
+<h1>ANT-MNIST Control Room</h1>
 
 <div class="controls">
-  <button id="startBtn" onclick="start()">Start</button>
-  <button id="stopBtn" onclick="stop()">Stop</button>
-  <span class="stat"><span class="label">Cycle: </span><span class="value" id="cycle">0</span></span>
-  <span class="stat"><span class="label">Step: </span><span class="value" id="step">0</span></span>
-  <span class="stat"><span class="label">Test: </span><span class="value" id="testAcc">-</span></span>
-  <span class="stat"><span class="label">Best: </span><span class="value good" id="bestAcc">-</span></span>
+  <button class="action" onclick="cmd('imprint',null,50)">Imprint All (50)</button>
+  <button class="action" onclick="cmd('train_cycle',null,50)">Train Cycle (50/digit)</button>
+  <button class="action" onclick="cmd('train_cycle',null,200)">Train Cycle (200/digit)</button>
+  <button onclick="cmd('evaluate',null,1000)">Evaluate (1000)</button>
+  <button class="freeze-btn" onclick="cmd('freeze')">Freeze All</button>
+  <span class="stat"><span class="l">Cycle </span><span class="v" id="vCycle">0</span></span>
+  <span class="stat"><span class="l">Test </span><span class="v" id="vAcc">-</span></span>
+  <span class="stat"><span class="l">Best </span><span class="v g" id="vBest">-</span></span>
+</div>
+
+<div class="panel">
+  <h2>Detectors</h2>
+  <div class="det-grid" id="detGrid"></div>
+</div>
+
+<div class="panel" id="logPanel" style="max-height:100px;overflow-y:auto;font-size:11px;color:#aaa">
+  <h2>Log</h2>
+  <div id="logDiv"></div>
 </div>
 
 <div class="row">
-  <div class="panel" style="flex:1">
-    <h2>Detector Weights (colored by thermal state)</h2>
-    <div class="detector-grid" id="detectorGrid"></div>
-  </div>
-</div>
-
-<div class="row">
-  <div class="panel" style="flex:1">
-    <h2>Sample Predictions (consensus of 10 detectors)</h2>
+  <div class="panel col" style="flex:2">
+    <h2>Sample Predictions</h2>
     <div class="sample-grid" id="sampleGrid"></div>
   </div>
-</div>
-
-<div class="row">
-  <div class="panel" style="flex:1">
+  <div class="panel col" style="flex:1">
+    <h2>Confusion Matrix</h2>
+    <div id="confDiv"></div>
     <h2>Accuracy History</h2>
-    <canvas id="historyChart"></canvas>
+    <canvas class="chart" id="histChart"></canvas>
+    <h2>Per-Detector</h2>
+    <canvas class="chart" id="detChart"></canvas>
   </div>
 </div>
 
 <script>
-const API = '';
-let state = {};
+let S = {};
+const DC = ['#e6194b','#3cb44b','#4363d8','#f58231','#911eb4','#42d4f4','#f032e6','#bfef45','#fabebe','#469990'];
 
-function start() { fetch(API + '/api/start'); }
-function stop() { fetch(API + '/api/stop'); }
-
-function tempColor(temp) {
-  if (temp >= 192) return '#ff4444'; // HOT - red
-  if (temp >= 128) return '#ff8844'; // WARM - orange
-  if (temp >= 64) return '#4488ff';  // COOL - blue
-  return '#ffffff';                   // COLD - white
+function cmd(action, digit, count) {
+  const body = {action};
+  if (digit !== null && digit !== undefined) body.digit = digit;
+  if (count !== null && count !== undefined) body.count = count;
+  fetch('/api/cmd', {method:'POST', body:JSON.stringify(body), headers:{'Content-Type':'application/json'}})
+    .then(() => setTimeout(poll, 500));
 }
 
-function weightColor(current, temp) {
-  const alpha = Math.min(1, Math.abs(current) / 5000);
-  const tc = tempColor(temp);
-  if (current > 0) return tc;
-  if (current < 0) return tc;
-  return '#222';
+function tempColor(t) {
+  if (t>=192) return '#ff3333'; if (t>=128) return '#ff8833'; if (t>=64) return '#3388ff'; return '#ddd';
 }
 
-function renderDetectors(detectors) {
-  const grid = document.getElementById('detectorGrid');
-  grid.innerHTML = '';
-  for (const d of detectors) {
-    const card = document.createElement('div');
-    card.className = 'detector-card';
+function renderDetectors(dets) {
+  const g = document.getElementById('detGrid'); g.innerHTML = '';
+  for (const d of dets) {
+    const card = document.createElement('div'); card.className = 'det-card';
+    const accPct = (d.eval_accuracy*100).toFixed(0);
+    const accColor = d.eval_accuracy > 0.8 ? '#4caf50' : d.eval_accuracy > 0.5 ? '#ff8833' : '#888';
+    let h = `<div class="det-header"><h3>Digit ${d.digit}</h3><span class="phase-badge phase-${d.phase}">${d.phase}</span><span class="acc" style="color:${accColor}">${accPct}%</span></div>`;
 
-    let html = `<h3>Digit ${d.digit}</h3>`;
+    // Controls
+    h += `<div class="det-controls">`;
+    h += `<button class="action" onclick="cmd('imprint',${d.digit},50)">Imprint</button>`;
+    h += `<button class="action" onclick="cmd('train_cycle',${d.digit},50)">Train</button>`;
+    h += `<button class="freeze-btn" onclick="cmd('freeze',${d.digit})">Freeze</button>`;
+    h += `<button onclick="cmd('unfreeze',${d.digit})">Thaw</button>`;
+    h += `<button class="danger" onclick="cmd('flush',${d.digit})">Flush</button>`;
+    h += `</div>`;
+
+    // Heatmap
+    h += `<canvas class="heatmap" id="hm${d.digit}" width="28" height="28" style="width:56px;height:56px"></canvas>`;
+
+    // Examples
+    h += '<div class="examples">';
+    h += '<span style="color:#4caf50">OK:</span>';
+    for (let i=0;i<3;i++) h += `<canvas class="ex-img ok" id="ex${d.digit}c${i}" width="28" height="28" style="width:24px;height:24px"></canvas>`;
+    h += '<span style="color:#f44336">Miss:</span>';
+    for (let i=0;i<3;i++) h += `<canvas class="ex-img miss" id="ex${d.digit}w${i}" width="28" height="28" style="width:24px;height:24px"></canvas>`;
+    h += '</div>';
 
     // Weight bar
-    html += '<div class="weight-bar">';
-    const n = d.weight_currents.length;
-    for (let i = 0; i < n; i++) {
-      const c = d.weight_currents[i];
-      const t = d.weight_temps ? d.weight_temps[i] : 255;
-      const bg = weightColor(c, t);
-      const intensity = Math.min(1, Math.abs(c) / 2000);
-      html += `<div class="weight-cell" style="background:${bg};opacity:${0.3 + intensity * 0.7}" title="w[${i}]=${c} t=${t}"></div>`;
+    const n = (d.weight_currents||[]).length;
+    if (n > 0) {
+      h += '<div class="bar-row"><span class="bar-label">wt</span><div class="bar">';
+      for (let i=0;i<n;i++) {
+        const c=d.weight_currents[i]; const op=0.3+Math.min(1,Math.abs(c)/3000)*0.7;
+        const col = c>0?'#4caf50':c<0?'#f44336':'#222';
+        h+=`<div class="bar-cell" style="background:${col};opacity:${op}" title="w${i}=${c}"></div>`;
+      }
+      h += '</div></div>';
     }
-    html += '</div>';
 
     // Pressure bar
-    if (d.weight_pressures && d.weight_pressures.length > 0) {
-      html += '<div class="weight-bar" style="height:6px;margin-top:1px">';
-      for (let i = 0; i < d.weight_pressures.length; i++) {
-        const p = d.weight_pressures[i];
-        const bg = p > 0 ? '#4caf50' : p < 0 ? '#f44336' : '#222';
-        const intensity = Math.min(1, Math.abs(p) / 500);
-        html += `<div class="weight-cell" style="background:${bg};opacity:${0.2 + intensity * 0.8}" title="p[${i}]=${p}"></div>`;
+    if ((d.weight_pressures||[]).length > 0) {
+      h += '<div class="bar-row"><span class="bar-label">pr</span><div class="bar">';
+      for (let i=0;i<d.weight_pressures.length;i++) {
+        const p=d.weight_pressures[i]; const col=p>0?'#4caf50':p<0?'#f44336':'#222';
+        const op=0.2+Math.min(1,Math.abs(p)/200)*0.8;
+        h+=`<div class="bar-cell" style="background:${col};opacity:${op}" title="p${i}=${p}"></div>`;
       }
-      html += '</div>';
+      h += '</div></div>';
     }
 
-    card.innerHTML = html;
-    grid.appendChild(card);
+    // Sparkline
+    h += `<canvas class="sparkline" id="sp${d.digit}"></canvas>`;
+
+    card.innerHTML = h; g.appendChild(card);
+
+    setTimeout(() => {
+      // Draw template heatmap (the imprinted digit pattern)
+      const hc = document.getElementById('hm'+d.digit);
+      if (hc && (d.template||[]).length) {
+        const ctx=hc.getContext('2d'); const img=ctx.createImageData(28,28);
+        const maxT = Math.max(1, ...d.template.map(v=>Math.abs(v)));
+        for (let j=0;j<784;j++) {
+          const v=d.template[j]||0;
+          const norm = Math.abs(v) / maxT;
+          if (v > 0) { // excitatory — green
+            img.data[j*4]=0; img.data[j*4+1]=Math.floor(norm*255); img.data[j*4+2]=0;
+          } else if (v < 0) { // inhibitory — red
+            img.data[j*4]=Math.floor(norm*255); img.data[j*4+1]=0; img.data[j*4+2]=0;
+          } else { // silent — dark
+            img.data[j*4]=20; img.data[j*4+1]=20; img.data[j*4+2]=20;
+          }
+          img.data[j*4+3]=255;
+        }
+        ctx.putImageData(img,0,0);
+      }
+      // Examples
+      for (const [t,arr] of [['c',d.correct_examples],['w',d.wrong_examples]]) {
+        for (let i=0;i<3;i++) {
+          const ec=document.getElementById(`ex${d.digit}${t}${i}`);
+          if (!ec||!arr||!arr[i]) continue;
+          const ctx=ec.getContext('2d'); const img=ctx.createImageData(28,28);
+          for (let j=0;j<784;j++) { const v=arr[i][j]; img.data[j*4]=v;img.data[j*4+1]=v;img.data[j*4+2]=v;img.data[j*4+3]=255; }
+          ctx.putImageData(img,0,0);
+        }
+      }
+      // Sparkline
+      const sc=document.getElementById('sp'+d.digit);
+      if (sc && (d.confidence_history||[]).length>1) {
+        const ctx=sc.getContext('2d'); sc.width=sc.clientWidth; sc.height=16;
+        ctx.fillStyle='#0a0a0a'; ctx.fillRect(0,0,sc.width,sc.height);
+        const h=d.confidence_history; const mx=Math.max(1,...h.map(v=>Math.abs(v)));
+        ctx.strokeStyle=DC[d.digit]; ctx.lineWidth=1; ctx.beginPath();
+        for (let j=0;j<h.length;j++) {
+          const x=j/(h.length-1)*sc.width; const y=8-(h[j]/mx)*7;
+          if(j===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+        }
+        ctx.stroke();
+        ctx.strokeStyle='#333';ctx.lineWidth=0.5;ctx.beginPath();ctx.moveTo(0,8);ctx.lineTo(sc.width,8);ctx.stroke();
+      }
+    },10);
   }
 }
 
 function renderSamples(samples) {
-  const grid = document.getElementById('sampleGrid');
-  grid.innerHTML = '';
-  for (const s of samples) {
-    const card = document.createElement('div');
-    card.className = 'sample-card ' + (s.correct ? 'correct' : 'wrong');
-
-    // Draw digit
-    const canvas = document.createElement('canvas');
-    canvas.width = 28; canvas.height = 28;
-    canvas.className = 'sample-canvas';
-    canvas.style.width = '56px'; canvas.style.height = '56px';
-    const ctx = canvas.getContext('2d');
-    const img = ctx.createImageData(28, 28);
-    for (let i = 0; i < 784; i++) {
-      const v = s.pixels[i];
-      img.data[i*4] = v; img.data[i*4+1] = v; img.data[i*4+2] = v; img.data[i*4+3] = 255;
+  const g=document.getElementById('sampleGrid'); g.innerHTML='';
+  for (const s of (samples||[])) {
+    const card=document.createElement('div'); card.className='sample-card '+(s.correct?'correct':'wrong');
+    const cv=document.createElement('canvas'); cv.width=28;cv.height=28;cv.className='sample-canvas';cv.style.width='42px';cv.style.height='42px';
+    card.appendChild(cv);
+    setTimeout(()=>{
+      const ctx=cv.getContext('2d'); const img=ctx.createImageData(28,28);
+      for(let i=0;i<784;i++){const v=s.pixels[i];img.data[i*4]=v;img.data[i*4+1]=v;img.data[i*4+2]=v;img.data[i*4+3]=255;}
+      ctx.putImageData(img,0,0);
+      ctx.fillStyle=s.correct?'#4caf50':'#f44336'; ctx.font='bold 10px monospace'; ctx.fillText(s.predicted.toString(),1,10);
+    },10);
+    const lbl=document.createElement('div');lbl.style.fontSize='10px';
+    lbl.innerHTML=`<span style="color:#555">${s.label}</span>→<span style="color:${s.correct?'#4caf50':'#f44336'}">${s.predicted}</span>`;
+    card.appendChild(lbl);
+    const bars=document.createElement('div');bars.className='conf-bars';
+    const mx=Math.max(1,...s.confidences.map(c=>Math.abs(c)));
+    for(let i=0;i<10;i++){
+      const bar=document.createElement('div');bar.className='conf-bar';bar.title=`d${i}:${s.confidences[i]}`;
+      const fill=document.createElement('div');fill.className='conf-fill';
+      fill.style.height=Math.abs(s.confidences[i])/mx*100+'%';
+      fill.style.background=i===s.predicted?'#ff6b35':i===s.label?'#4caf50':'#444';
+      if(s.confidences[i]<0)fill.style.opacity='0.3';
+      bar.appendChild(fill);bars.appendChild(bar);
     }
-    ctx.putImageData(img, 0, 0);
-
-    card.appendChild(canvas);
-
-    // Label
-    const label = document.createElement('div');
-    label.style.fontSize = '11px';
-    label.innerHTML = `<span style="color:#888">true:</span>${s.label} <span style="color:#888">pred:</span><span style="color:${s.correct?'#4caf50':'#f44336'}">${s.predicted}</span>`;
-    card.appendChild(label);
-
-    // Confidence bars
-    const bars = document.createElement('div');
-    bars.className = 'confidence-bars';
-    const maxConf = Math.max(1, ...s.confidences.map(c => Math.abs(c)));
-    for (let i = 0; i < 10; i++) {
-      const bar = document.createElement('div');
-      bar.className = 'conf-bar';
-      bar.title = `d${i}: ${s.confidences[i]}`;
-      const fill = document.createElement('div');
-      fill.className = 'conf-fill';
-      if (i === s.predicted) fill.classList.add('winner');
-      if (i === s.label) fill.classList.add('correct-class');
-      const h = Math.abs(s.confidences[i]) / maxConf * 100;
-      fill.style.height = h + '%';
-      if (s.confidences[i] < 0) fill.style.opacity = '0.4';
-      bar.appendChild(fill);
-      bars.appendChild(bar);
-    }
-    card.appendChild(bars);
-
-    grid.appendChild(card);
+    card.appendChild(bars);g.appendChild(card);
   }
 }
 
-function renderHistory(history) {
-  const canvas = document.getElementById('historyChart');
-  const ctx = canvas.getContext('2d');
-  canvas.width = canvas.clientWidth;
-  canvas.height = 120;
-  ctx.fillStyle = '#111';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  if (history.length < 2) return;
-
-  const w = canvas.width;
-  const h = canvas.height;
-  const maxAcc = 1.0;
-
-  ctx.strokeStyle = '#ff6b35';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  for (let i = 0; i < history.length; i++) {
-    const x = (i / (history.length - 1)) * w;
-    const y = h - (history[i].test_acc / maxAcc) * h;
-    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+function renderConfusion(conf) {
+  if(!conf) return;
+  let h='<table class="confusion"><tr><th></th>';
+  for(let c=0;c<10;c++) h+=`<th>${c}</th>`;
+  h+='</tr>';
+  for(let r=0;r<10;r++){
+    h+=`<tr><th>${r}</th>`;
+    const rm=Math.max(1,...conf[r]);
+    for(let c=0;c<10;c++){
+      const v=conf[r][c]; const i=v/rm;
+      const bg=r===c?`rgba(76,175,80,${i})`:`rgba(244,67,54,${i*0.7})`;
+      h+=`<td style="background:${bg}" title="${r}→${c}:${v}">${v||''}</td>`;
+    }
+    h+='</tr>';
   }
-  ctx.stroke();
+  document.getElementById('confDiv').innerHTML=h+'</table>';
+}
 
-  // Grid lines
-  ctx.strokeStyle = '#333';
-  ctx.lineWidth = 0.5;
-  for (const pct of [0.1, 0.25, 0.5, 0.75, 0.9]) {
-    const y = h - pct * h;
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
-    ctx.fillStyle = '#555'; ctx.fillText((pct*100).toFixed(0)+'%', 2, y-2);
-  }
+function renderCharts(hist) {
+  if(!hist||!hist.length) return;
+  // Accuracy
+  const cv=document.getElementById('histChart');const ctx=cv.getContext('2d');
+  cv.width=cv.clientWidth;cv.height=90;ctx.fillStyle='#0e0e0e';ctx.fillRect(0,0,cv.width,cv.height);
+  ctx.strokeStyle='#1a1a1a';ctx.lineWidth=0.5;
+  for(const p of [.25,.5,.75,1]){const y=cv.height-p*cv.height;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(cv.width,y);ctx.stroke();
+    ctx.fillStyle='#333';ctx.font='8px monospace';ctx.fillText((p*100)+'%',1,y-1);}
+  ctx.strokeStyle='#ff6b35';ctx.lineWidth=2;ctx.beginPath();
+  for(let i=0;i<hist.length;i++){const x=hist.length===1?cv.width/2:i/(hist.length-1)*cv.width;const y=cv.height-hist[i].test_acc*cv.height;
+    if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);}ctx.stroke();
+
+  // Per-detector
+  const dv=document.getElementById('detChart');const dctx=dv.getContext('2d');
+  dv.width=dv.clientWidth;dv.height=90;dctx.fillStyle='#0e0e0e';dctx.fillRect(0,0,dv.width,dv.height);
+  dctx.strokeStyle='#1a1a1a';dctx.lineWidth=0.5;
+  const y50=dv.height*.5;dctx.beginPath();dctx.moveTo(0,y50);dctx.lineTo(dv.width,y50);dctx.stroke();
+  for(let d=0;d<10;d++){dctx.strokeStyle=DC[d];dctx.lineWidth=1;dctx.beginPath();
+    for(let i=0;i<hist.length;i++){if(!hist[i].det_accs||hist[i].det_accs.length<=d)continue;
+      const x=hist.length===1?dv.width/2:i/(hist.length-1)*dv.width;const y=dv.height-(hist[i].det_accs[d]||0)*dv.height;
+      if(i===0)dctx.moveTo(x,y);else dctx.lineTo(x,y);}dctx.stroke();}
+  for(let d=0;d<10;d++){dctx.fillStyle=DC[d];dctx.fillText(d.toString(),dv.width-105+d*10,10);}
 }
 
 async function poll() {
   try {
-    const resp = await fetch(API + '/api/state');
-    state = await resp.json();
-
-    document.getElementById('cycle').textContent = state.cycle || 0;
-    document.getElementById('step').textContent = state.step || 0;
-    document.getElementById('testAcc').textContent = state.test_acc ? (state.test_acc * 100).toFixed(1) + '%' : '-';
-    document.getElementById('bestAcc').textContent = state.best_test_acc ? (state.best_test_acc * 100).toFixed(1) + '%' : '-';
-
-    if (state.detectors) renderDetectors(state.detectors);
-    if (state.samples) renderSamples(state.samples);
-    if (state.history) renderHistory(state.history);
-  } catch(e) {}
+    const r=await fetch('/api/state'); S=await r.json();
+    document.getElementById('vCycle').textContent=S.global_cycle||0;
+    document.getElementById('vAcc').textContent=S.test_acc?(S.test_acc*100).toFixed(1)+'%':'-';
+    document.getElementById('vBest').textContent=S.best_test_acc?(S.best_test_acc*100).toFixed(1)+'%':'-';
+    if(S.detectors) renderDetectors(S.detectors);
+    if(S.samples) renderSamples(S.samples);
+    if(S.confusion) renderConfusion(S.confusion);
+    if(S.history) renderCharts(S.history);
+    if(S.log) document.getElementById('logDiv').innerHTML = S.log.map(l=>'<div>'+l+'</div>').join('');
+  } catch(e){}
 }
-
-setInterval(poll, 1000);
-poll();
+setInterval(poll,2000); poll();
 </script>
 </body></html>

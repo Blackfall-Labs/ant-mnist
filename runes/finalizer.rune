@@ -1,0 +1,35 @@
+meta {
+  name "finalizer"
+  version 1
+  description "Takes 10 detector correlation maps, classifies digit"
+}
+use :ant_ml
+
+# Architecture: 7840 → 10
+# Input: 10 correlation maps concatenated (each 784 signals)
+# Output: 10 class scores
+# Learned via mastery — which combinations of spatial correlations
+# reliably indicate which digit.
+
+def forward(correlations) do
+  w = load_synaptic("finalizer.w", 10, 7840)
+  matmul(correlations, w)
+end
+
+def predict(correlations) do
+  argmax(forward(correlations))
+end
+
+def train(correlations, label) do
+  w = load_synaptic("finalizer.w", 10, 7840)
+  out = matmul(correlations, w)
+  out_c = clamp(out, -60, 60)
+  target = onehot(label, 10, 40, 20)
+  mastery_update(w, correlations, out_c, target, [500, 5, 50])
+  argmax(out)
+end
+
+def decay() do
+  w = load_synaptic("finalizer.w", 10, 7840)
+  mastery_decay(w)
+end

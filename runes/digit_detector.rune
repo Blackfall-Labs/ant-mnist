@@ -1,47 +1,57 @@
 meta {
   name "digit_detector"
-  version 1
-  description "Binary digit detector — answers 'is this digit N?' with confidence"
+  version 3
+  description "Spatial correlation detector — returns 784 confidence signals"
 }
 use :ant_ml
 
-# Architecture: 784 → 48 → 1
-# Frozen random projection + learned binary output.
-# Each detector instance gets its own synaptic key prefix
-# passed via the 'prefix' variable set by the host.
+# Architecture: template-based spatial correlation.
+# The hidden layer IS the template — 784 signals representing
+# what this digit looks like at each pixel position.
+# Correlation produces 784 output signals preserving polarity,
+# magnitude, and confidence (multiplier).
+#
+# No matmul. No output weights. Pure signal correlation.
 
-def forward(input) do
-  w_hidden = load_synaptic_frozen(prefix + ".w_hidden", 48, 784)
-  w_out = load_synaptic(prefix + ".w_out", 1, 48)
-
-  h = matmul(input, w_hidden)
-  h = relu(h)
-  matmul(h, w_out)
+def imprint(input, row) do
+  template = thermal_load_synaptic(prefix + ".template", 1, 784)
+  thermal_imprint(template, input, row)
 end
 
-def train(input, is_match) do
-  w_hidden = load_synaptic_frozen(prefix + ".w_hidden", 48, 784)
-  w_out = load_synaptic(prefix + ".w_out", 1, 48)
-
-  h = matmul(input, w_hidden)
-  h = relu(h)
-  out = matmul(h, w_out)
-  out_c = clamp(out, -127, 127)
-
-  # Binary target: asymmetric to compensate 9:1 class imbalance.
-  # +120 for match (strong excitatory), -13 for non-match (weak inhibitory).
-  # Ratio ~9:1 matches the 54000:6000 negative:positive sample ratio.
-  target_val = is_match * 133 - 13
-  # Config: [threshold, decay, gate]
-  # W_out is 1×48: ~12 active hidden neurons
-  # Positive pressure per match sample: ~12 × 15 × (120/32≈4) = ~720
-  # Negative pressure per non-match: ~12 × 15 × (13/32≈1) = ~180
-  # threshold 100: fires on strong match, takes ~6 non-matches to fire
-  mastery_update(w_out, h, out_c, [target_val], [100, 3, 20])
-  out
+def finish_imprint(count) do
+  template = thermal_load_synaptic(prefix + ".template", 1, 784)
+  thermal_normalize_imprint(template, count)
 end
 
-def decay() do
-  w_out = load_synaptic(prefix + ".w_out", 1, 48)
-  mastery_decay(w_out)
+def finish_imprint_row(count, row) do
+  template = thermal_load_synaptic(prefix + ".template", 1, 784)
+  thermal_normalize_imprint(template, count, row)
+end
+
+# Correlate input against template.
+# Returns 784 signals: mul(input, template) element-wise.
+# Each signal preserves polarity (agree/disagree), magnitude
+# (feature strength), and the product encodes confidence.
+def correlate(input) do
+  template = thermal_load_synaptic(prefix + ".template", 1, 784)
+  # Get template as signal array via matmul with identity-like access
+  # Actually we need raw template values — use thermal_matmul with
+  # a single-element input [1] to extract the row? No...
+  # We need a verb that reads thermal weights as signals.
+  # For now: element-wise multiply input × template
+  # thermal_matmul gives us dot product (scalar), not element-wise.
+  # We need the raw template values exposed.
+
+  # Use the signal-level mul verb: mul(input, template_signals)
+  # But template_signals needs to be extracted as an array.
+  # This requires a new verb: thermal_read(handle) → array of currents
+  tmpl = thermal_read(template)
+  mul(input, tmpl)
+end
+
+# Scalar confidence: sum of absolute correlation values.
+# Higher = more overlap between input and template.
+def confidence(input) do
+  corr = correlate(input)
+  sum(abs(corr))
 end
