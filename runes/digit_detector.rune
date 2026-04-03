@@ -1,17 +1,19 @@
 meta {
   name "digit_detector"
-  version 3
-  description "Spatial correlation detector — returns 784 confidence signals"
+  version 4
+  description "Spatial correlation detector with thermal mastery learning"
 }
 use :ant_ml
 
-# Architecture: template-based spatial correlation.
-# The hidden layer IS the template — 784 signals representing
-# what this digit looks like at each pixel position.
-# Correlation produces 784 output signals preserving polarity,
-# magnitude, and confidence (multiplier).
+# Architecture: template-based spatial correlation with mastery learning.
+# The template is a 1×784 ThermalWeightMatrix — one weight per pixel position.
+# Imprinting sets initial template values from averaged samples.
+# Training refines the template via thermal mastery: weights that correctly
+# discriminate this digit from others cool and stabilize, weights that
+# don't contribute warm up and can flip or weaken.
 #
-# No matmul. No output weights. Pure signal correlation.
+# Forward path: thermal_matmul(input, template) → 1 scalar output.
+# Correlation path: element-wise mul(input, template_signals) → 784 signals.
 
 def imprint(input, row) do
   template = thermal_load_synaptic(prefix + ".template", 1, 784)
@@ -28,30 +30,53 @@ def finish_imprint_row(count, row) do
   thermal_normalize_imprint(template, count, row)
 end
 
+# Forward pass: dot product of input against template → 1 scalar.
+# Positive = input matches template, negative = mismatch.
+def forward(input) do
+  template = thermal_load_synaptic(prefix + ".template", 1, 784)
+  thermal_matmul(input, template)
+end
+
 # Correlate input against template.
-# Returns 784 signals: mul(input, template) element-wise.
-# Each signal preserves polarity (agree/disagree), magnitude
-# (feature strength), and the product encodes confidence.
+# Returns 784 signals: element-wise mul(input, template_signals).
+# Each signal preserves polarity (agree/disagree) and magnitude.
 def correlate(input) do
   template = thermal_load_synaptic(prefix + ".template", 1, 784)
-  # Get template as signal array via matmul with identity-like access
-  # Actually we need raw template values — use thermal_matmul with
-  # a single-element input [1] to extract the row? No...
-  # We need a verb that reads thermal weights as signals.
-  # For now: element-wise multiply input × template
-  # thermal_matmul gives us dot product (scalar), not element-wise.
-  # We need the raw template values exposed.
-
-  # Use the signal-level mul verb: mul(input, template_signals)
-  # But template_signals needs to be extracted as an array.
-  # This requires a new verb: thermal_read(handle) → array of currents
   tmpl = thermal_read(template)
   mul(input, tmpl)
 end
 
+# Train the detector template via thermal mastery learning.
+# is_mine: 1 if this sample is this detector's digit, 0 otherwise
+#
+# Target: positive activation (+40) for own digit, inhibitory (-20) for others.
+# This teaches the template to fire strongly for its digit and suppress for others.
+#
+# Config: [threshold=100, decay=1, gate=10, cooling=500, warming=10, warming_thresh=20]
+#   - High threshold (100): 784 inputs accumulate pressure fast, need high bar to prevent oscillation
+#   - Cooling (20): weights cool visibly within a few training cycles
+#   - Moderate warming (10/20): stuck cool weights can recover if under sustained pressure
+def train(input, is_mine) do
+  template = thermal_load_synaptic(prefix + ".template", 1, 784)
+  output = thermal_matmul(input, template)
+
+  target = [40]
+  if is_mine == 0 do
+    target = [-20]
+  end
+
+  thermal_mastery_update(template, input, output, target, is_mine,
+    [100, 1, 10, 20, 10, 20])
+end
+
 # Scalar confidence: sum of absolute correlation values.
-# Higher = more overlap between input and template.
 def confidence(input) do
   corr = correlate(input)
   sum(abs(corr))
+end
+
+# Decay pressure on all template weights. Call once per cycle.
+def decay() do
+  template = thermal_load_synaptic(prefix + ".template", 1, 784)
+  thermal_decay(template)
 end

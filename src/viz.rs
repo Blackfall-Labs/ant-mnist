@@ -34,8 +34,19 @@ enum Phase { Cold, Imprinted, Training, Frozen }
 impl Default for Phase { fn default() -> Self { Self::Cold } }
 
 #[derive(Serialize, Clone, Default)]
+struct FinalizerViz {
+    class_magnitudes: Vec<i64>,     // 10 values: sum of |weight| per output class
+    class_nonzero: Vec<u32>,        // 10 values: count of nonzero weights per class
+    total_weights: usize,
+    nonzero_weights: usize,
+    steps: u64,
+    transitions: u64,
+}
+
+#[derive(Serialize, Clone, Default)]
 struct ControlState {
     detectors: Vec<DetViz>,
+    finalizer: FinalizerViz,
     samples: Vec<SampleViz>,
     confusion: [[u32; 10]; 10],
     history: Vec<Snap>,
@@ -49,7 +60,8 @@ struct ControlState {
 struct DetViz {
     digit: usize,
     phase: Phase,
-    template: Vec<i32>,     // 784 template current values (the imprint)
+    template: Vec<i32>,     // 784 imprint snapshot (frozen at imprint time)
+    learned: Vec<i32>,      // 784 live weight currents (changes during training)
     eval_accuracy: f32,
     confidence_history: Vec<i64>,
     thermals: Vec<u8>,      // 784 temperature values (0-255, HOT→COLD)
@@ -83,6 +95,7 @@ struct Detector {
     eval_total: u32,
     confidence_history: Vec<i64>,
     activations: Vec<u8>,   // 784 activation glow values, decayed each poll
+    imprint_snapshot: Vec<i32>,  // frozen copy of template after imprinting
 }
 
 impl Detector {
@@ -98,7 +111,8 @@ impl Detector {
         evaluator.eval_with_engine(&program, &engine).unwrap();
         Self { evaluator, engine, digit, runtime, phase: Phase::Cold,
                imprint_count: 0, eval_correct: 0, eval_total: 0,
-               confidence_history: Vec::new(), activations: vec![0u8; 784] }
+               confidence_history: Vec::new(), activations: vec![0u8; 784],
+               imprint_snapshot: vec![0; 784] }
     }
 
     fn imprint_sample(&mut self, input: &[Value]) {
@@ -113,6 +127,8 @@ impl Detector {
         if self.imprint_count > 0 {
             let count = Value::Integer(self.imprint_count as i64);
             self.evaluator.invoke("finish_imprint", &[count], &self.engine).ok();
+            // Snapshot the template at imprint time — this never changes
+            self.imprint_snapshot = self.get_current_weights();
         }
     }
 
@@ -132,7 +148,24 @@ impl Detector {
         }
     }
 
-    fn get_template(&self) -> Vec<i32> {
+    /// Train the detector template via thermal mastery.
+    /// is_mine: true if this sample belongs to this detector's digit.
+    fn train_sample(&mut self, input: &[Value], is_mine: bool) {
+        let input_val = Value::Array(Arc::new(input.to_vec()));
+        let is_mine_val = Value::Integer(if is_mine { 1 } else { 0 });
+        self.evaluator.invoke("train", &[input_val, is_mine_val], &self.engine).ok();
+        if is_mine {
+            self.phase = Phase::Training;
+        }
+    }
+
+    /// Decay pressure on all template weights. Call once per cycle.
+    fn decay_pressure(&mut self) {
+        self.evaluator.invoke("decay", &[], &self.engine).ok();
+    }
+
+    /// Current live weight values (changes during training)
+    fn get_current_weights(&self) -> Vec<i32> {
         let rt = self.runtime.lock().unwrap();
         let key = format!("d{}.template", self.digit);
         if let Some(twm) = rt.thermal_weights_by_key(&key) {
@@ -179,7 +212,8 @@ impl Detector {
         DetViz {
             digit: self.digit,
             phase: self.phase,
-            template: self.get_template(),
+            template: self.imprint_snapshot.clone(),
+            learned: self.get_current_weights(),
             eval_accuracy: if self.eval_total > 0 { self.eval_correct as f32 / self.eval_total as f32 } else { 0.0 },
             confidence_history: self.confidence_history.clone(),
             thermals: self.get_thermals(),
@@ -230,6 +264,45 @@ impl Finalizer {
 
     fn decay(&mut self) {
         self.evaluator.invoke("decay", &[], &self.engine).ok();
+    }
+
+    fn get_viz(&self) -> FinalizerViz {
+        let rt = self.runtime.lock().unwrap();
+        if let Some(wm) = rt.weights_by_key("finalizer.w") {
+            let mut class_magnitudes = vec![0i64; 10];
+            let mut class_nonzero = vec![0u32; 10];
+            let mut total_nonzero = 0usize;
+
+            for row in 0..wm.rows.min(10) {
+                for col in 0..wm.cols {
+                    let s = &wm.data[row * wm.cols + col];
+                    let c = s.current();
+                    class_magnitudes[row] += c.abs() as i64;
+                    if c != 0 {
+                        class_nonzero[row] += 1;
+                        total_nonzero += 1;
+                    }
+                }
+            }
+
+            // Get mastery state if available
+            let (steps, transitions) = if let Some(&handle) = rt.synaptic_key_handles().get("finalizer.w") {
+                if let Some(ms) = rt.get_mastery(handle) {
+                    (ms.steps, ms.transitions)
+                } else { (0, 0) }
+            } else { (0, 0) };
+
+            FinalizerViz {
+                class_magnitudes,
+                class_nonzero,
+                total_weights: wm.data.len(),
+                nonzero_weights: total_nonzero,
+                steps,
+                transitions,
+            }
+        } else {
+            FinalizerViz::default()
+        }
     }
 }
 
@@ -303,7 +376,7 @@ fn handle_cmd(
                 }
                 det.finish_imprint();
 
-                let template = det.get_template();
+                let template = det.get_current_weights();
                 let nonzero = template.iter().filter(|&&v| v != 0).count();
                 let min_v = template.iter().min().copied().unwrap_or(0);
                 let max_v = template.iter().max().copied().unwrap_or(0);
@@ -332,6 +405,12 @@ fn handle_cmd(
             for &(img_idx, label) in &train_set {
                 let encoded = encode_image(&train.images[img_idx].pixels);
 
+                // Train each detector: is this sample my digit?
+                for d in detectors.iter_mut() {
+                    let is_mine = d.digit == label as usize;
+                    d.train_sample(&encoded, is_mine);
+                }
+
                 // Get 10 correlation maps + mark activations from output
                 let correlations: Vec<Value> = detectors.iter_mut()
                     .map(|d| d.correlate(&encoded))
@@ -345,13 +424,16 @@ fn handle_cmd(
                 let pred = finalizer.train(&combined, label as usize);
                 if pred == label as usize { correct += 1; }
             }
+
+            // Decay pressure on all detectors + finalizer
+            for d in detectors.iter_mut() { d.decay_pressure(); }
             finalizer.decay();
 
             {
                 let mut s = state.lock().unwrap();
                 s.cycle += 1;
             }
-            log_msg(state, format!("Trained finalizer: {}/{} ({:.1}%) on {} samples ({}/digit)",
+            log_msg(state, format!("Trained: {}/{} ({:.1}%) on {} samples ({}/digit)",
                 correct, train_set.len(), correct as f64 / train_set.len() as f64 * 100.0,
                 train_set.len(), per_digit));
 
@@ -453,6 +535,17 @@ fn handle_cmd(
             state.lock().unwrap().detectors = detectors.iter().map(|d| d.get_viz()).collect();
         }
 
+        "reset" => {
+            // Full system reset — flush all detectors, rebuild finalizer, zero all state
+            for d in detectors.iter_mut() { d.flush(); }
+            *finalizer = Finalizer::new();
+            let mut s = state.lock().unwrap();
+            *s = ControlState::default();
+            s.detectors = detectors.iter().map(|d| d.get_viz()).collect();
+            drop(s);
+            log_msg(state, "Reset: all detectors flushed, finalizer rebuilt, counters zeroed".into());
+        }
+
         _ => log_msg(state, format!("Unknown: {}", cmd.action)),
     }
 }
@@ -503,9 +596,13 @@ fn main() {
                     .with_header(Header::from_bytes("Content-Type", "text/html").unwrap()));
             }
             (_, "/api/state") => {
-                // Decay activations and refresh detector state each poll
+                // Decay activations and refresh detector + finalizer state each poll
                 for d in detectors.iter_mut() { d.decay_activations(); }
-                state.lock().unwrap().detectors = detectors.iter().map(|d| d.get_viz()).collect();
+                {
+                    let mut s = state.lock().unwrap();
+                    s.detectors = detectors.iter().map(|d| d.get_viz()).collect();
+                    s.finalizer = finalizer.get_viz();
+                }
 
                 let s = state.lock().unwrap().clone();
                 let json = serde_json::to_string(&s).unwrap_or_else(|_| "{}".into());

@@ -3,6 +3,7 @@ import { ConfusionMatrix } from "@/components/ConfusionMatrix";
 import { AccuracyChart } from "@/components/AccuracyChart";
 import { SampleGrid } from "@/components/SampleGrid";
 import { DetectorCard } from "@/components/DetectorCard";
+import { FinalizerPanel } from "@/components/FinalizerPanel";
 
 export function OverviewPage() {
   const { state, sendCmd } = useCtrl();
@@ -22,6 +23,7 @@ export function OverviewPage() {
         <CmdBtn label="Train Cycle (200/digit)" onClick={() => sendCmd("train_cycle", undefined, 200)} cls="action" />
         <CmdBtn label="Evaluate (1000)" onClick={() => sendCmd("evaluate", undefined, 1000)} />
         <CmdBtn label="Freeze All" onClick={() => sendCmd("freeze")} cls="freeze" />
+        <CmdBtn label="Reset All" onClick={() => sendCmd("reset")} cls="danger" />
       </div>
 
       {/* Detector grid */}
@@ -41,6 +43,9 @@ export function OverviewPage() {
           ))}
         </div>
       </div>
+
+      {/* Finalizer */}
+      <FinalizerPanel />
 
       {/* Bottom row: samples + charts */}
       <div className="flex gap-2 min-h-0 flex-1">
@@ -122,7 +127,9 @@ function CmdBtn({
       ? "border-green-800 hover:bg-green-950"
       : cls === "freeze"
         ? "border-blue-800 hover:bg-blue-950"
-        : "border-gray-600 hover:bg-gray-800";
+        : cls === "danger"
+          ? "border-red-800 hover:bg-red-950"
+          : "border-gray-600 hover:bg-gray-800";
   return (
     <button className={`${base} ${extra}`} onClick={onClick}>
       {label}

@@ -52,18 +52,22 @@ export function DetectorCard({ det }: Props) {
         <Btn label="Flush" cls="danger" onClick={() => sendCmd("flush", det.digit)} />
       </div>
 
-      {/* Heatmaps row: template | thermals | activations */}
+      {/* Heatmaps row: imprint | learned | thermal | activity */}
       <div className="flex gap-1">
         <div className="text-center">
-          <TemplateHeatmap template={det.template} size={56} />
-          <span className="text-[8px] text-gray-600">Template</span>
+          <TemplateHeatmap template={det.template} size={42} />
+          <span className="text-[8px] text-gray-600">Imprint</span>
         </div>
         <div className="text-center">
-          <ThermalMatrix thermals={det.thermals} size={56} />
+          <TemplateHeatmap template={det.learned} size={42} />
+          <span className="text-[8px] text-gray-600">Learned</span>
+        </div>
+        <div className="text-center">
+          <ThermalMatrix thermals={det.thermals} size={42} />
           <span className="text-[8px] text-gray-600">Thermal</span>
         </div>
         <div className="text-center">
-          <ActivationMatrix activations={det.activations} size={56} />
+          <ActivationMatrix activations={det.activations} size={42} />
           <span className="text-[8px] text-gray-600">Activity</span>
         </div>
       </div>

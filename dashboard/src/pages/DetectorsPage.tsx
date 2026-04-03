@@ -34,10 +34,15 @@ export function DetectorsPage() {
                   {det.digit}
                 </span>
                 <TemplateHeatmap template={det.template} size={84} />
-                <span className="text-[8px] text-gray-600">Template</span>
+                <span className="text-[8px] text-gray-600">Imprint</span>
               </div>
               <div className="flex flex-col items-center gap-1">
                 <span className="text-[10px] text-gray-500">{det.phase}</span>
+                <TemplateHeatmap template={det.learned} size={84} />
+                <span className="text-[8px] text-gray-600">Learned</span>
+              </div>
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-[10px] text-gray-500">&nbsp;</span>
                 <ThermalMatrix thermals={det.thermals} size={84} />
                 <span className="text-[8px] text-gray-600">Thermal</span>
               </div>
