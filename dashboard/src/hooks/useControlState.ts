@@ -4,6 +4,7 @@ import type { ControlState } from "@/types";
 const EMPTY_STATE: ControlState = {
   detectors: [],
   finalizer: { class_magnitudes: [], class_nonzero: [], total_weights: 0, nonzero_weights: 0, steps: 0, transitions: 0 },
+  signal_flow: { label: 0, predicted: 0, detector_winner: 0, raw_confidences: [], inhibited_confidences: [], finalizer_scores: [] },
   samples: [],
   confusion: [],
   history: [],

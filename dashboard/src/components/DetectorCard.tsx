@@ -72,8 +72,13 @@ export function DetectorCard({ det }: Props) {
         </div>
       </div>
 
-      {/* Sparkline */}
-      <div className="mt-1">
+      {/* Stats + Sparkline */}
+      <div className="text-[8px] text-gray-600 mt-0.5">
+        {det.mastery_steps > 0 && (
+          <span>s:{det.mastery_steps.toLocaleString()} t:{det.mastery_transitions.toLocaleString()} </span>
+        )}
+      </div>
+      <div className="mt-0.5">
         <Sparkline data={det.confidence_history} digit={det.digit} height={16} />
       </div>
     </div>

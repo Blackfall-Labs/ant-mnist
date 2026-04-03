@@ -43,10 +43,22 @@ struct FinalizerViz {
     transitions: u64,
 }
 
+/// Live signal flow for the last processed sample — shows the full pipeline.
+#[derive(Serialize, Clone, Default)]
+struct SignalFlow {
+    label: u8,                          // true label
+    predicted: u8,                      // finalizer prediction
+    detector_winner: u8,                // which detector had highest raw confidence
+    raw_confidences: Vec<i64>,          // 10 raw detector scalar confidences (pre-inhibition)
+    inhibited_confidences: Vec<i64>,    // 10 post-inhibition confidences
+    finalizer_scores: Vec<i64>,         // 10 finalizer output scores
+}
+
 #[derive(Serialize, Clone, Default)]
 struct ControlState {
     detectors: Vec<DetViz>,
     finalizer: FinalizerViz,
+    signal_flow: SignalFlow,
     samples: Vec<SampleViz>,
     confusion: [[u32; 10]; 10],
     history: Vec<Snap>,
@@ -62,10 +74,13 @@ struct DetViz {
     phase: Phase,
     template: Vec<i32>,     // 784 imprint snapshot (frozen at imprint time)
     learned: Vec<i32>,      // 784 live weight currents (changes during training)
+    correlation: Vec<i64>,  // 784 last correlation output (what this detector saw)
     eval_accuracy: f32,
     confidence_history: Vec<i64>,
     thermals: Vec<u8>,      // 784 temperature values (0-255, HOT→COLD)
     activations: Vec<u8>,   // 784 activation intensities (0-255, decays over time)
+    mastery_steps: u64,
+    mastery_transitions: u64,
 }
 
 #[derive(Serialize, Clone)]
@@ -96,6 +111,7 @@ struct Detector {
     confidence_history: Vec<i64>,
     activations: Vec<u8>,   // 784 activation glow values, decayed each poll
     imprint_snapshot: Vec<i32>,  // frozen copy of template after imprinting
+    last_correlation: Vec<i64>,  // 784 last correlation output
 }
 
 impl Detector {
@@ -112,7 +128,7 @@ impl Detector {
         Self { evaluator, engine, digit, runtime, phase: Phase::Cold,
                imprint_count: 0, eval_correct: 0, eval_total: 0,
                confidence_history: Vec::new(), activations: vec![0u8; 784],
-               imprint_snapshot: vec![0; 784] }
+               imprint_snapshot: vec![0; 784], last_correlation: vec![0; 784] }
     }
 
     fn imprint_sample(&mut self, input: &[Value]) {
@@ -132,11 +148,18 @@ impl Detector {
         }
     }
 
-    /// Returns 784 correlation signals as Value::Array
+    /// Returns 784 correlation signals as Value::Array, stores for viz.
     fn correlate(&mut self, input: &[Value]) -> Value {
         let input_val = Value::Array(Arc::new(input.to_vec()));
-        self.evaluator.invoke("correlate", &[input_val], &self.engine)
-            .unwrap_or(Value::Array(Arc::new(vec![Value::Integer(0); 784])))
+        let result = self.evaluator.invoke("correlate", &[input_val], &self.engine)
+            .unwrap_or(Value::Array(Arc::new(vec![Value::Integer(0); 784])));
+        // Store for visualization
+        if let Value::Array(arr) = &result {
+            self.last_correlation = arr.iter().map(|v| {
+                if let Value::Integer(n) = v { *n } else { 0 }
+            }).collect();
+        }
+        result
     }
 
     /// Returns scalar confidence
@@ -208,16 +231,31 @@ impl Detector {
         }
     }
 
+    fn get_mastery_stats(&self) -> (u64, u64) {
+        let rt = self.runtime.lock().unwrap();
+        let key = format!("d{}.template", self.digit);
+        if let Some(&handle) = rt.synaptic_key_handles().get(&key) {
+            if let Some(ms) = rt.get_thermal_mastery(handle) {
+                return (ms.steps, ms.transitions);
+            }
+        }
+        (0, 0)
+    }
+
     fn get_viz(&self) -> DetViz {
+        let (steps, transitions) = self.get_mastery_stats();
         DetViz {
             digit: self.digit,
             phase: self.phase,
             template: self.imprint_snapshot.clone(),
             learned: self.get_current_weights(),
+            correlation: self.last_correlation.clone(),
             eval_accuracy: if self.eval_total > 0 { self.eval_correct as f32 / self.eval_total as f32 } else { 0.0 },
             confidence_history: self.confidence_history.clone(),
             thermals: self.get_thermals(),
             activations: self.activations.clone(),
+            mastery_steps: steps,
+            mastery_transitions: transitions,
         }
     }
 
@@ -251,6 +289,16 @@ impl Finalizer {
         match self.evaluator.invoke("predict", &[correlations.clone()], &self.engine) {
             Ok(Value::Integer(n)) => n as usize,
             _ => 0,
+        }
+    }
+
+    /// Forward pass returning the 10 raw output scores.
+    fn forward(&mut self, correlations: &Value) -> Vec<i64> {
+        match self.evaluator.invoke("forward", &[correlations.clone()], &self.engine) {
+            Ok(Value::Array(arr)) => arr.iter().map(|v| {
+                if let Value::Integer(n) = v { *n } else { 0 }
+            }).collect(),
+            _ => vec![0; 10],
         }
     }
 
@@ -550,16 +598,32 @@ fn handle_cmd(
                 let mut correlations: Vec<Value> = detectors.iter_mut()
                     .map(|d| d.correlate(&encoded))
                     .collect();
-                let scalar_confs = scalar_confidences(&correlations);
-                inhibit_correlations(&mut correlations, &scalar_confs);
+                let raw_confs = scalar_confidences(&correlations);
+                inhibit_correlations(&mut correlations, &raw_confs);
                 normalize_correlations(&mut correlations);
+                let inhibited_confs = scalar_confidences(&correlations);
 
                 for (d, c) in detectors.iter_mut().zip(correlations.iter()) {
                     d.mark_activations_from_correlation(c);
                 }
 
                 let combined = concat_correlations(&correlations);
-                let predicted = finalizer.predict(&combined);
+                let finalizer_scores = finalizer.forward(&combined);
+                let predicted = finalizer_scores.iter().enumerate()
+                    .max_by_key(|(_, s)| *s).map(|(i, _)| i).unwrap_or(0);
+
+                // Update signal flow for latest sample
+                let detector_winner = raw_confs.iter().enumerate()
+                    .max_by_key(|(_, c)| *c).map(|(i, _)| i).unwrap_or(0);
+                state.lock().unwrap().signal_flow = SignalFlow {
+                    label: img.label,
+                    predicted: predicted as u8,
+                    detector_winner: detector_winner as u8,
+                    raw_confidences: raw_confs.clone(),
+                    inhibited_confidences: inhibited_confs,
+                    finalizer_scores,
+                };
+                let scalar_confs = raw_confs;
 
                 confusion[label][predicted] += 1;
                 if predicted == label { test_correct += 1; }

@@ -4,6 +4,7 @@ import { AccuracyChart } from "@/components/AccuracyChart";
 import { SampleGrid } from "@/components/SampleGrid";
 import { DetectorCard } from "@/components/DetectorCard";
 import { FinalizerPanel } from "@/components/FinalizerPanel";
+import { CorrelationGrid } from "@/components/CorrelationGrid";
 
 export function OverviewPage() {
   const { state, sendCmd } = useCtrl();
@@ -48,8 +49,9 @@ export function OverviewPage() {
         </div>
       </div>
 
-      {/* Finalizer */}
+      {/* Finalizer + Correlation outputs */}
       <FinalizerPanel />
+      <CorrelationGrid />
 
       {/* Bottom row: samples + charts */}
       <div className="flex gap-2 min-h-0 flex-1">
