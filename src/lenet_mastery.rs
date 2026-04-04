@@ -509,6 +509,11 @@ impl LeNetMastery {
         self.output.forward(&hidden_out)
     }
 
+    /// Return the frozen features vector (for dual hemisphere).
+    pub fn get_features(&self, image: &[u8]) -> Vec<i16> {
+        self.features(image)
+    }
+
     pub fn train_one(&mut self, image: &[u8], label: usize) -> (usize, bool) {
         // Forward through frozen layers
         let fc1_out = self.frozen_features(image);

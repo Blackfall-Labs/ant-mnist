@@ -48,3 +48,7 @@ path = "src/lenet_thermal.rs"
 [[bin]]
 name = "voter-analysis"
 path = "src/voter_analysis.rs"
+
+[[bin]]
+name = "lenet-dual-hemi"
+path = "src/lenet_dual_hemi.rs"
