@@ -178,7 +178,7 @@ pub struct MasteryLayer {
     bias: Vec<i16>,
     pub rows: usize,
     pub cols: usize,
-    pressure_threshold: i16,
+    pub pressure_threshold: i16,
     magnitude_step: u8,
     pub steps: u64,
     pub transitions: u64,

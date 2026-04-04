@@ -27,68 +27,50 @@ fn peak_rss_mb() -> f64 {
     { 0.0 }
 }
 
-/// Two hemispheres with lateral inhibition.
+/// Two hemispheres — near identical, slight variations, full information preserved.
 struct DualHemisphere {
     left: LeNetMastery,
     right: LeNetMastery,
-    inhibition_strength: i32,  // how much one hemisphere suppresses the other
 }
 
 impl DualHemisphere {
     fn new(seed_left: u64, seed_right: u64) -> Self {
+        // Same architecture, different random projections.
+        // Right hemisphere gets a slightly different pressure threshold —
+        // making it more cautious (needs more evidence to commit).
+        let mut right = LeNetMastery::new(seed_right);
+        right.output.pressure_threshold = 12; // vs left's default 8
+
         Self {
             left: LeNetMastery::new(seed_left),
-            right: LeNetMastery::new(seed_right),
-            inhibition_strength: 3,  // divide opponent's matching score by this
+            right,
         }
     }
 
-    /// Forward with lateral inhibition.
-    /// Both hemispheres score independently, then suppress each other.
-    fn predict_inhibited(&self, image: &[u8]) -> (usize, Vec<i16>) {
+    /// Both hemispheres process the same image.
+    /// Combined output = full sum of both (no suppression, no information loss).
+    /// Competition is by magnitude: the hemisphere with stronger evidence for
+    /// a class contributes more to that class's combined score naturally.
+    fn predict_combined(&self, image: &[u8]) -> (usize, Vec<i32>) {
         let scores_l = self.left.scores(image);
         let scores_r = self.right.scores(image);
 
-        // Find each hemisphere's top prediction
-        let best_l = scores_l.iter().enumerate().max_by_key(|(_, &s)| s).map(|(i, _)| i).unwrap_or(0);
-        let best_r = scores_r.iter().enumerate().max_by_key(|(_, &s)| s).map(|(i, _)| i).unwrap_or(0);
-
-        // Lateral inhibition: each hemisphere suppresses the other's matching class
         let mut combined = [0i32; 10];
         for c in 0..10 {
-            let mut l = scores_l[c] as i32;
-            let mut r = scores_r[c] as i32;
-
-            // If right hemisphere's best prediction matches this class,
-            // left's score for this class gets BOOSTED (agreement reinforcement)
-            // but right's OTHER scores get suppressed
-            if c == best_r && c == best_l {
-                // Both agree — mutual reinforcement
-                l = l * 3 / 2;
-                r = r * 3 / 2;
-            } else if c == best_l {
-                // Only left thinks this — suppress right's contribution
-                r = r / self.inhibition_strength;
-            } else if c == best_r {
-                // Only right thinks this — suppress left's contribution
-                l = l / self.inhibition_strength;
-            }
-
-            combined[c] = l + r;
+            combined[c] = scores_l[c] as i32 + scores_r[c] as i32;
         }
 
-        let winner = combined.iter().enumerate().max_by_key(|(_, &s)| s).map(|(i, _)| i).unwrap_or(0);
-        let combined_i16: Vec<i16> = combined.iter().map(|&s| s.clamp(-32000, 32000) as i16).collect();
-        (winner, combined_i16)
+        let winner = combined.iter().enumerate()
+            .max_by_key(|(_, &s)| s).map(|(i, _)| i).unwrap_or(0);
+        (winner, combined.to_vec())
     }
 
     fn train_one(&mut self, image: &[u8], label: usize) -> (usize, bool) {
-        // Both hemispheres learn independently
+        // Both hemispheres learn from the same sample independently
         self.left.train_one(image, label);
         self.right.train_one(image, label);
 
-        // Prediction uses inhibition
-        let (pred, _) = self.predict_inhibited(image);
+        let (pred, _) = self.predict_combined(image);
         (pred, pred == label)
     }
 
@@ -153,12 +135,12 @@ fn main() {
             let img = &test.images[i];
             let label = img.label as usize;
 
-            // Per-pair inhibited prediction
-            let pair_preds: Vec<(usize, Vec<i16>)> = pairs.iter()
-                .map(|p| p.predict_inhibited(&img.pixels))
+            // Each pair combines its two hemispheres
+            let pair_preds: Vec<(usize, Vec<i32>)> = pairs.iter()
+                .map(|p| p.predict_combined(&img.pixels))
                 .collect();
 
-            // Inhibited ensemble: sum inhibited scores across all pairs
+            // Cross-pair: sum combined scores across all pairs
             let mut ensemble_scores = [0i64; 10];
             for (_, scores) in &pair_preds {
                 for (c, &s) in scores.iter().enumerate() {
@@ -168,7 +150,6 @@ fn main() {
             let ensemble_winner = ensemble_scores.iter().enumerate()
                 .max_by_key(|(_, &s)| s).map(|(i, _)| i).unwrap_or(0);
 
-            // Best single pair (just for comparison)
             let best_pair = pair_preds[0].0;
 
             if label < 10 {
