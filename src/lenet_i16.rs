@@ -126,6 +126,7 @@ const FC_SHIFT: i32 = 6;    // divide by 64
 /// Effective lr = LR_NUM / LR_DEN
 const LR_NUM: i32 = 1;
 const LR_DEN: i32 = 64;     // ~0.016
+const LR_BITS: i32 = 6;     // approximation for shift-based update paths
 
 // ---------------------------------------------------------------------------
 // Forward operations
@@ -305,22 +306,22 @@ fn cross_entropy_gradient_i16(softmax_out: &[i16], label: usize) -> Vec<i32> {
 fn sgd_update_conv(weights: &mut ITensor4, grads: &GTensor4, bias: &mut ITensor1, d_bias: &GTensor1) {
     for (w, g) in weights.data.iter_mut().zip(grads.data.iter()) {
         // Shift gradient right for learning rate + accumulation scale
-        let update = *g >> (LR_SHIFT + CONV_SHIFT);
+        let update = *g >> (LR_BITS + CONV_SHIFT);
         *w = (*w as i32 - update).clamp(-500, 500) as i16;
     }
     for (b, g) in bias.data.iter_mut().zip(d_bias.data.iter()) {
-        let update = *g >> (LR_SHIFT + CONV_SHIFT);
+        let update = *g >> (LR_BITS + CONV_SHIFT);
         *b = (*b as i32 - update).clamp(-500, 500) as i16;
     }
 }
 
 fn sgd_update_fc(weights: &mut ITensor2, grads: &GTensor2, bias: &mut ITensor1, d_bias: &GTensor1) {
     for (w, g) in weights.data.iter_mut().zip(grads.data.iter()) {
-        let update = *g >> (LR_SHIFT + FC_SHIFT + 2); // extra shift for larger fan-in
+        let update = *g >> (LR_BITS + FC_SHIFT + 2); // extra shift for larger fan-in
         *w = (*w as i32 - update).clamp(-500, 500) as i16;
     }
     for (b, g) in bias.data.iter_mut().zip(d_bias.data.iter()) {
-        let update = *g >> (LR_SHIFT + FC_SHIFT);
+        let update = *g >> (LR_BITS + FC_SHIFT);
         *b = (*b as i32 - update).clamp(-500, 500) as i16;
     }
 }
