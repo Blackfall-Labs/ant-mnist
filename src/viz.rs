@@ -452,17 +452,62 @@ fn concat_correlations(corrs: &[Value]) -> Value {
 #[derive(Deserialize)]
 struct Cmd { action: String, #[serde(default)] digit: Option<usize>, #[serde(default)] count: Option<usize> }
 
-/// Auto-training curriculum state.
+/// Three-phase training curriculum.
+#[derive(Clone, Copy, PartialEq)]
+enum CurriculumPhase {
+    /// Phase 1: Each detector trains ONLY on its own digit. Isolation.
+    Isolation,
+    /// Phase 2: Each detector trains on what ISN'T theirs. Adversarial hardening.
+    Adversarial,
+    /// Phase 3: Detectors frozen. Only the finalizer trains on stable outputs.
+    Finalizer,
+}
+
 struct Curriculum {
-    remaining_cycles: u32,
-    per_digit: usize,       // alternates between 50 and 200
-    eval_every: u32,        // eval after this many cycles
-    cycle_in_batch: u32,
+    phase: CurriculumPhase,
+    remaining_in_phase: u32,
+    isolation_per_phase: u32,
+    adversarial_per_phase: u32,
+    finalizer_per_phase: u32,
+    step_in_phase: u32,
 }
 
 impl Curriculum {
-    fn new(total_cycles: u32) -> Self {
-        Self { remaining_cycles: total_cycles, per_digit: 50, eval_every: 3, cycle_in_batch: 0 }
+    fn new(isolation: u32, adversarial: u32, finalizer: u32) -> Self {
+        Self {
+            phase: CurriculumPhase::Isolation,
+            remaining_in_phase: isolation,
+            isolation_per_phase: isolation,
+            adversarial_per_phase: adversarial,
+            finalizer_per_phase: finalizer,
+            step_in_phase: 0,
+        }
+    }
+
+    fn advance_phase(&mut self) -> bool {
+        match self.phase {
+            CurriculumPhase::Isolation => {
+                self.phase = CurriculumPhase::Adversarial;
+                self.remaining_in_phase = self.adversarial_per_phase;
+                self.step_in_phase = 0;
+                true
+            }
+            CurriculumPhase::Adversarial => {
+                self.phase = CurriculumPhase::Finalizer;
+                self.remaining_in_phase = self.finalizer_per_phase;
+                self.step_in_phase = 0;
+                true
+            }
+            CurriculumPhase::Finalizer => false, // done
+        }
+    }
+
+    fn phase_name(&self) -> &'static str {
+        match self.phase {
+            CurriculumPhase::Isolation => "Phase 1: Isolation",
+            CurriculumPhase::Adversarial => "Phase 2: Adversarial",
+            CurriculumPhase::Finalizer => "Phase 3: Finalizer",
+        }
     }
 }
 
@@ -697,21 +742,82 @@ fn handle_cmd(
             log_msg(state, "Reset: all detectors flushed, finalizer rebuilt, counters zeroed".into());
         }
 
-        "auto_train" => {
-            // Auto curriculum: imprint if needed, then run N cycles alternating 50/200
-            let total = cmd.count.unwrap_or(100) as u32;
-
-            // Auto-imprint if detectors are cold
-            if detectors[0].phase == Phase::Cold {
-                let imprint_cmd = Cmd { action: "imprint".into(), digit: None, count: Some(50) };
-                handle_cmd(&imprint_cmd, detectors, finalizer, train, test, state);
+        "train_isolation" => {
+            // Phase 1: Each detector trains ONLY on its own digit
+            let per_digit = cmd.count.unwrap_or(200);
+            let mut by_digit: Vec<Vec<usize>> = vec![Vec::new(); 10];
+            for (i, img) in train.images.iter().enumerate() {
+                let d = img.label as usize;
+                if d < 10 && by_digit[d].len() < per_digit { by_digit[d].push(i); }
             }
 
-            log_msg(state, format!("Auto-train: starting {} cycles", total));
+            for digit in 0..10 {
+                for &img_idx in &by_digit[digit] {
+                    let encoded = encode_image(&train.images[img_idx].pixels);
+                    detectors[digit].train_sample(&encoded, true);
+                }
+                detectors[digit].decay_pressure();
+            }
+
+            { state.lock().unwrap().cycle += 1; }
+            log_msg(state, format!("Isolation: each detector trained on {} own-digit samples", per_digit));
         }
 
-        "stop" => {
-            log_msg(state, "Stopped auto-train".into());
+        "train_adversarial" => {
+            // Phase 2: Each detector trains on what ISN'T theirs
+            let per_digit = cmd.count.unwrap_or(50);
+            let mut by_digit: Vec<Vec<usize>> = vec![Vec::new(); 10];
+            for (i, img) in train.images.iter().enumerate() {
+                let d = img.label as usize;
+                if d < 10 && by_digit[d].len() < per_digit { by_digit[d].push(i); }
+            }
+
+            for digit in 0..10 {
+                for other in 0..10 {
+                    if other == digit { continue; }
+                    for &img_idx in &by_digit[other] {
+                        let encoded = encode_image(&train.images[img_idx].pixels);
+                        detectors[digit].train_sample(&encoded, false);
+                    }
+                }
+                detectors[digit].decay_pressure();
+            }
+
+            { state.lock().unwrap().cycle += 1; }
+            log_msg(state, format!("Adversarial: each detector hardened on {} non-digit samples per class", per_digit));
+        }
+
+        "train_finalizer_only" => {
+            // Phase 3: Detectors frozen, only finalizer trains
+            let per_digit = cmd.count.unwrap_or(200);
+            let mut by_digit: Vec<Vec<usize>> = vec![Vec::new(); 10];
+            for (i, img) in train.images.iter().enumerate() {
+                let d = img.label as usize;
+                if d < 10 && by_digit[d].len() < per_digit { by_digit[d].push(i); }
+            }
+            let mut train_set: Vec<(usize, u8)> = Vec::new();
+            for d in 0..10 { for &idx in &by_digit[d] { train_set.push((idx, d as u8)); } }
+
+            let mut correct = 0u32;
+            for &(img_idx, label) in &train_set {
+                let encoded = encode_image(&train.images[img_idx].pixels);
+                let mut correlations: Vec<Value> = detectors.iter_mut()
+                    .map(|d| d.correlate(&encoded)).collect();
+                let confs = scalar_confidences(&correlations);
+                inhibit_correlations(&mut correlations, &confs);
+                normalize_correlations(&mut correlations);
+                let combined = concat_correlations(&correlations);
+                let pred = finalizer.train(&combined, label as usize);
+                if pred == label as usize { correct += 1; }
+            }
+            finalizer.decay();
+
+            { state.lock().unwrap().cycle += 1; }
+            log_msg(state, format!("Finalizer: {}/{} ({:.1}%)",
+                correct, train_set.len(), correct as f64 / train_set.len() as f64 * 100.0));
+
+            let eval_cmd = Cmd { action: "evaluate".into(), digit: None, count: Some(1000) };
+            handle_cmd(&eval_cmd, detectors, finalizer, train, test, state);
         }
 
         _ => log_msg(state, format!("Unknown: {}", cmd.action)),
@@ -799,8 +905,13 @@ fn main() {
                                 let imprint_cmd = Cmd { action: "imprint".into(), digit: None, count: Some(50) };
                                 handle_cmd(&imprint_cmd, &mut detectors, &mut finalizer, &train, &test, &state);
                             }
-                            curriculum = Some(Curriculum::new(total));
-                            log_msg(&state, format!("Auto-train: starting {} cycles", total));
+                            // 40% isolation, 30% adversarial, 30% finalizer
+                            let iso = (total * 40 / 100).max(3);
+                            let adv = (total * 30 / 100).max(3);
+                            let fin = total.saturating_sub(iso + adv).max(3);
+                            curriculum = Some(Curriculum::new(iso, adv, fin));
+                            log_msg(&state, format!("Auto-train: {} isolation → {} adversarial → {} finalizer",
+                                iso, adv, fin));
                         }
                         "stop" => {
                             curriculum = None;
@@ -821,22 +932,39 @@ fn main() {
         }
         } // end if let Some(request)
 
-        // Auto-training step: run one cycle if curriculum is active
+        // Auto-training step: run one cycle per phase
         if let Some(ref mut cur) = curriculum {
-            if cur.remaining_cycles == 0 {
-                log_msg(&state, "Auto-train: complete".into());
-                curriculum = None;
-            } else {
-                // Alternate between 50 and 200 per digit
-                let per_digit = if cur.cycle_in_batch % 2 == 0 { 50 } else { 200 };
-                let train_cmd = Cmd { action: "train_cycle".into(), digit: None, count: Some(per_digit) };
-                handle_cmd(&train_cmd, &mut detectors, &mut finalizer, &train, &test, &state);
+            if cur.remaining_in_phase == 0 {
+                if !cur.advance_phase() {
+                    // All phases done — final eval
+                    let eval_cmd = Cmd { action: "evaluate".into(), digit: None, count: Some(1000) };
+                    handle_cmd(&eval_cmd, &mut detectors, &mut finalizer, &train, &test, &state);
+                    log_msg(&state, "Auto-train: complete".into());
+                    curriculum = None;
+                } else {
+                    log_msg(&state, format!("→ {}", cur.phase_name()));
+                }
+            }
 
-                cur.remaining_cycles -= 1;
-                cur.cycle_in_batch += 1;
+            if let Some(ref mut cur) = curriculum {
+                let action = match cur.phase {
+                    CurriculumPhase::Isolation => "train_isolation",
+                    CurriculumPhase::Adversarial => "train_adversarial",
+                    CurriculumPhase::Finalizer => "train_finalizer_only",
+                };
+                let count = match cur.phase {
+                    CurriculumPhase::Isolation => 200,
+                    CurriculumPhase::Adversarial => 50,
+                    CurriculumPhase::Finalizer => 200,
+                };
+                let cmd = Cmd { action: action.into(), digit: None, count: Some(count) };
+                handle_cmd(&cmd, &mut detectors, &mut finalizer, &train, &test, &state);
 
-                // Eval periodically
-                if cur.cycle_in_batch % cur.eval_every == 0 {
+                cur.remaining_in_phase -= 1;
+                cur.step_in_phase += 1;
+
+                // Eval every 5 steps
+                if cur.step_in_phase % 5 == 0 {
                     let eval_cmd = Cmd { action: "evaluate".into(), digit: None, count: Some(1000) };
                     handle_cmd(&eval_cmd, &mut detectors, &mut finalizer, &train, &test, &state);
                 }

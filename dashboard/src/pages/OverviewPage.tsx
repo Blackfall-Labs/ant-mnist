@@ -25,8 +25,12 @@ export function OverviewPage() {
         <CmdBtn label="Evaluate (1000)" onClick={() => sendCmd("evaluate", undefined, 1000)} />
         <CmdBtn label="Freeze All" onClick={() => sendCmd("freeze")} cls="freeze" />
         <span className="border-l border-gray-700 mx-1 h-4" />
-        <CmdBtn label="Auto-Train (100)" onClick={() => sendCmd("auto_train", undefined, 100)} cls="action" />
-        <CmdBtn label="Auto-Train (500)" onClick={() => sendCmd("auto_train", undefined, 500)} cls="action" />
+        <CmdBtn label="P1: Isolation" onClick={() => sendCmd("train_isolation", undefined, 200)} cls="action" />
+        <CmdBtn label="P2: Adversarial" onClick={() => sendCmd("train_adversarial", undefined, 50)} cls="action" />
+        <CmdBtn label="P3: Finalizer" onClick={() => sendCmd("train_finalizer_only", undefined, 200)} cls="action" />
+        <span className="border-l border-gray-700 mx-1 h-4" />
+        <CmdBtn label="Auto (100)" onClick={() => sendCmd("auto_train", undefined, 100)} cls="action" />
+        <CmdBtn label="Auto (300)" onClick={() => sendCmd("auto_train", undefined, 300)} cls="action" />
         <CmdBtn label="Stop" onClick={() => sendCmd("stop")} cls="freeze" />
         <CmdBtn label="Reset All" onClick={() => sendCmd("reset")} cls="danger" />
       </div>
