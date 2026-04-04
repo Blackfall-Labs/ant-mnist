@@ -113,15 +113,49 @@ fn main() {
             epoch, train_acc * 100.0, test_acc * 100.0, total_s, train_s, eval_s, rss);
         eprintln!("      | {}", pca_short);
 
-        // Also evaluate individual voters for comparison
+        // Evaluate individual voters
         if epoch == 1 || epoch == epochs {
+            let mut voter_accs: Vec<(usize, f64)> = Vec::new();
             for (v, net) in nets.iter().enumerate() {
                 let mut vc = 0u32;
-                for i in 0..test.len().min(10000) {
+                let n = test.len().min(10000);
+                for i in 0..n {
                     let img = &test.images[i];
                     if net.predict(&img.pixels) == img.label as usize { vc += 1; }
                 }
-                eprintln!("      | voter {} alone: {:.1}%", v, vc as f64 / test.len().min(10000) as f64 * 100.0);
+                let acc = vc as f64 / n as f64;
+                voter_accs.push((v, acc));
+                eprintln!("      | voter {} alone: {:.1}%", v, acc * 100.0);
+            }
+
+            // After epoch 1: prune weak voters (below 50%)
+            if epoch == 1 {
+                let before = nets.len();
+                let mut keep = Vec::new();
+                for (v, acc) in &voter_accs {
+                    if *acc >= 0.50 {
+                        keep.push(*v);
+                    } else {
+                        eprintln!("      | PRUNED voter {} ({:.1}% < 50%)", v, acc * 100.0);
+                    }
+                }
+                if keep.len() < before {
+                    // Measure pruned ensemble accuracy (without actually removing)
+                    let mut pruned_correct = 0u32;
+                    for i in 0..test.len() {
+                        let img = &test.images[i];
+                        let label = img.label as usize;
+                        let mut votes = [0u32; 10];
+                        for &k in &keep {
+                            let pred = nets[k].predict(&img.pixels);
+                            if pred < 10 { votes[pred] += 1; }
+                        }
+                        let winner = votes.iter().enumerate().max_by_key(|(_, &v)| v).map(|(i, _)| i).unwrap_or(0);
+                        if label < 10 && winner == label { pruned_correct += 1; }
+                    }
+                    let pruned_acc = pruned_correct as f64 / test.len() as f64;
+                    eprintln!("      | PRUNED ensemble ({} voters): {:.1}%", keep.len(), pruned_acc * 100.0);
+                }
             }
         }
     }
