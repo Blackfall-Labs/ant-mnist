@@ -1,0 +1,192 @@
+   Compiling crossbeam-utils v0.8.21
+   Compiling rayon-core v1.13.0
+warning: use of deprecated associated function `Signal::from_i16`: defaults multiplier to 1 — use Signal::from_signed_i32(val) for large ranges or construct with explicit multiplier
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:437:15
+    |
+437 |         Self::from_i16(delta)
+    |               ^^^^^^^^
+    |
+    = note: `#[warn(deprecated)]` on by default
+
+warning: use of deprecated associated function `Signal::positive`: use Signal::positive_amplified(mag, mul) — s = p × m × k requires all three values
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:452:19
+    |
+452 |             Self::positive(magnitude)
+    |                   ^^^^^^^^
+
+warning: use of deprecated associated function `Signal::from_spike_rate`: defaults multiplier to 1 — construct Signal with explicit multiplier instead
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:464:15
+    |
+464 |         Self::from_spike_rate(rate_hz, max_rate_hz)
+    |               ^^^^^^^^^^^^^^^
+
+warning: use of deprecated associated function `Signal::from_signed_i32`: defaults multiplier to 1 — use Signal::from_current(val) for full p × m × k range
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:583:15
+    |
+583 |         Self::from_signed_i32(a + b)
+    |               ^^^^^^^^^^^^^^^
+
+warning: use of deprecated associated function `Signal::from_signed_i32`: defaults multiplier to 1 — use Signal::from_current(val) for full p × m × k range
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:632:36
+    |
+632 |             let mut result = Self::from_signed_i32((current + delta as i16) as i32);
+    |                                    ^^^^^^^^^^^^^^^
+
+warning: use of deprecated associated function `Signal::from_signed_i32`: defaults multiplier to 1 — use Signal::from_current(val) for full p × m × k range
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:636:36
+    |
+636 |             let mut result = Self::from_signed_i32((current - delta as i16) as i32);
+    |                                    ^^^^^^^^^^^^^^^
+
+   Compiling either v1.15.0
+warning: `ternary-signal` (lib) generated 6 warnings
+warning: field `vector_width` is never read
+  --> E:\repos\blackfall-labs\atomic-neural-transistors\src\memory.rs:47:5
+   |
+38 | pub struct MemoryANT {
+   |            --------- field in this struct
+...
+47 |     vector_width: u16,
+   |     ^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: method `resolve_path` is never used
+  --> E:\repos\blackfall-labs\atomic-neural-transistors\src\modules\ant_ml.rs:97:8
+   |
+80 | impl AntRuntime {
+   | --------------- method in this implementation
+...
+97 |     fn resolve_path(&self, path: &str) -> PathBuf {
+   |        ^^^^^^^^^^^^
+
+warning: `atomic-neural-transistors` (lib) generated 2 warnings
+   Compiling crossbeam-epoch v0.9.18
+   Compiling crossbeam-deque v0.8.6
+   Compiling rayon v1.11.0
+   Compiling ant-mnist v0.1.0 (E:\repos\blackfall-labs\ant-mnist)
+warning: unused import: `MasteryLayer`
+  --> src\lenet_ensemble.rs:15:35
+   |
+15 | use lenet_mastery::{LeNetMastery, MasteryLayer};
+   |                                   ^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `raw_output`
+   --> src\lenet_mastery.rs:330:9
+    |
+330 |         raw_output: &[i16],   // 84-dim (pre-relu hidden output)
+    |         ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_raw_output`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: type `Rng` is more private than the item `MasteryLayer::frozen_random`
+   --> src\lenet_mastery.rs:183:5
+    |
+183 |     pub fn frozen_random(rows: usize, cols: usize, rng: &mut Rng) -> Self {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ associated function `MasteryLayer::frozen_random` is reachable at visibility `pub(crate)`
+    |
+note: but type `Rng` is only usable at visibility `pub(self)`
+   --> src\lenet_mastery.rs:10:1
+    |
+ 10 | struct Rng(u64);
+    | ^^^^^^^^^^
+    = note: `#[warn(private_interfaces)]` on by default
+
+warning: type `Rng` is more private than the item `MasteryLayer::random_init`
+   --> src\lenet_mastery.rs:189:5
+    |
+189 |     pub fn random_init(rows: usize, cols: usize, rng: &mut Rng) -> Self {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ associated function `MasteryLayer::random_init` is reachable at visibility `pub(crate)`
+    |
+note: but type `Rng` is only usable at visibility `pub(self)`
+   --> src\lenet_mastery.rs:10:1
+    |
+ 10 | struct Rng(u64);
+    | ^^^^^^^^^^
+
+warning: associated function `print_image` is never used
+  --> src\mnist.rs:65:12
+   |
+18 | impl MnistDataset {
+   | ----------------- associated function in this implementation
+...
+65 |     pub fn print_image(image: &MnistImage) {
+   |            ^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: associated function `zeros` is never used
+  --> src\lenet_mastery.rs:41:8
+   |
+40 | impl T1 {
+   | ------- associated function in this implementation
+41 |     fn zeros(len: usize) -> Self { Self { data: vec![0; len] } }
+   |        ^^^^^
+
+warning: methods `apply_transition`, `nonzero_count`, and `weight_stats` are never used
+   --> src\lenet_mastery.rs:299:8
+    |
+168 | impl MasteryLayer {
+    | ----------------- methods in this implementation
+...
+299 |     fn apply_transition(&mut self, idx: usize, needed: i8) {
+    |        ^^^^^^^^^^^^^^^^
+...
+395 |     pub fn nonzero_count(&self) -> usize {
+    |            ^^^^^^^^^^^^^
+...
+399 |     pub fn weight_stats(&self) -> (f64, f64) {
+    |            ^^^^^^^^^^^^
+
+warning: associated function `new_with_plastic_hidden` is never used
+   --> src\lenet_mastery.rs:441:12
+    |
+424 | impl LeNetMastery {
+    | ----------------- associated function in this implementation
+...
+441 |     pub fn new_with_plastic_hidden(seed: u64) -> Self {
+    |            ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `ant-mnist` (bin "lenet-ensemble") generated 8 warnings (run `cargo fix --bin "lenet-ensemble" -p ant-mnist` to apply 2 suggestions)
+    Finished `release` profile [optimized] target(s) in 5.30s
+     Running `target\release\lenet-ensemble.exe data 5 10`
+=== Ensemble LeNet-5: 5 voters, 10 epochs ===
+Loading MNIST...
+  train=60000, test=10000
+  per voter: 44426 total, 11014 plastic
+  total: 222130 weights across 5 voters
+  rayon threads: 12
+  E 1 | train 60.9% | test 78.9% | 32s (train 19s + eval 14s) | 96.9MB
+      | d0:88% d1:91% d2:81% d3:75% d4:64% d5:83% d6:90% d7:74% d8:71% d9:71%
+      | voter 0 alone: 67.4%
+      | voter 1 alone: 66.9%
+      | voter 2 alone: 63.7%
+      | voter 3 alone: 40.4%
+      | voter 4 alone: 67.1%
+  E 2 | train 59.2% | test 76.8% | 32s (train 19s + eval 14s) | 96.9MB
+      | d0:84% d1:89% d2:74% d3:75% d4:55% d5:83% d6:90% d7:76% d8:70% d9:71%
+  E 3 | train 57.8% | test 75.3% | 33s (train 19s + eval 14s) | 96.9MB
+      | d0:82% d1:89% d2:68% d3:73% d4:51% d5:83% d6:89% d7:73% d8:69% d9:76%
+  E 4 | train 56.7% | test 74.5% | 36s (train 21s + eval 16s) | 96.9MB
+      | d0:79% d1:90% d2:70% d3:68% d4:59% d5:84% d6:85% d7:66% d8:69% d9:74%
+  E 5 | train 56.4% | test 74.0% | 35s (train 22s + eval 14s) | 96.9MB
+      | d0:76% d1:92% d2:67% d3:67% d4:64% d5:81% d6:84% d7:64% d8:71% d9:73%
+  E 6 | train 55.9% | test 73.0% | 33s (train 19s + eval 14s) | 96.9MB
+      | d0:73% d1:92% d2:61% d3:72% d4:54% d5:74% d6:87% d7:64% d8:73% d9:77%
+  E 7 | train 55.4% | test 73.8% | 32s (train 19s + eval 14s) | 96.9MB
+      | d0:73% d1:91% d2:75% d3:70% d4:64% d5:79% d6:87% d7:66% d8:69% d9:63%
+  E 8 | train 54.7% | test 72.3% | 32s (train 19s + eval 14s) | 96.9MB
+      | d0:77% d1:90% d2:63% d3:61% d4:52% d5:74% d6:90% d7:69% d8:69% d9:76%
+  E 9 | train 54.2% | test 71.5% | 33s (train 19s + eval 14s) | 96.9MB
+      | d0:70% d1:91% d2:57% d3:60% d4:53% d5:75% d6:91% d7:74% d8:68% d9:74%
+  E10 | train 53.8% | test 71.8% | 33s (train 19s + eval 14s) | 96.9MB
+      | d0:69% d1:90% d2:69% d3:66% d4:46% d5:73% d6:91% d7:74% d8:66% d9:72%
+      | voter 0 alone: 61.9%
+      | voter 1 alone: 61.7%
+      | voter 2 alone: 58.9%
+      | voter 3 alone: 30.3%
+      | voter 4 alone: 56.4%
+
+=== Ensemble complete ===
