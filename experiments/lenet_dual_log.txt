@@ -1,0 +1,319 @@
+warning: use of deprecated associated function `Signal::from_i16`: defaults multiplier to 1 — use Signal::from_signed_i32(val) for large ranges or construct with explicit multiplier
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:437:15
+    |
+437 |         Self::from_i16(delta)
+    |               ^^^^^^^^
+    |
+    = note: `#[warn(deprecated)]` on by default
+
+warning: use of deprecated associated function `Signal::positive`: use Signal::positive_amplified(mag, mul) — s = p × m × k requires all three values
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:452:19
+    |
+452 |             Self::positive(magnitude)
+    |                   ^^^^^^^^
+
+warning: use of deprecated associated function `Signal::from_spike_rate`: defaults multiplier to 1 — construct Signal with explicit multiplier instead
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:464:15
+    |
+464 |         Self::from_spike_rate(rate_hz, max_rate_hz)
+    |               ^^^^^^^^^^^^^^^
+
+warning: use of deprecated associated function `Signal::from_signed_i32`: defaults multiplier to 1 — use Signal::from_current(val) for full p × m × k range
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:583:15
+    |
+583 |         Self::from_signed_i32(a + b)
+    |               ^^^^^^^^^^^^^^^
+
+warning: use of deprecated associated function `Signal::from_signed_i32`: defaults multiplier to 1 — use Signal::from_current(val) for full p × m × k range
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:632:36
+    |
+632 |             let mut result = Self::from_signed_i32((current + delta as i16) as i32);
+    |                                    ^^^^^^^^^^^^^^^
+
+warning: use of deprecated associated function `Signal::from_signed_i32`: defaults multiplier to 1 — use Signal::from_current(val) for full p × m × k range
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:636:36
+    |
+636 |             let mut result = Self::from_signed_i32((current - delta as i16) as i32);
+    |                                    ^^^^^^^^^^^^^^^
+
+warning: `ternary-signal` (lib) generated 6 warnings
+warning: field `vector_width` is never read
+  --> E:\repos\blackfall-labs\atomic-neural-transistors\src\memory.rs:47:5
+   |
+38 | pub struct MemoryANT {
+   |            --------- field in this struct
+...
+47 |     vector_width: u16,
+   |     ^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: method `resolve_path` is never used
+  --> E:\repos\blackfall-labs\atomic-neural-transistors\src\modules\ant_ml.rs:97:8
+   |
+80 | impl AntRuntime {
+   | --------------- method in this implementation
+...
+97 |     fn resolve_path(&self, path: &str) -> PathBuf {
+   |        ^^^^^^^^^^^^
+
+warning: `atomic-neural-transistors` (lib) generated 2 warnings
+   Compiling ant-mnist v0.1.0 (E:\repos\blackfall-labs\ant-mnist)
+warning: unnecessary parentheses around block return value
+   --> src\lenet_i16.rs:296:9
+    |
+296 |         (s as i32 - target) // range: [-1000, 1000]
+    |         ^                 ^
+    |
+    = note: `#[warn(unused_parens)]` (part of `#[warn(unused)]`) on by default
+help: remove these parentheses
+    |
+296 -         (s as i32 - target) // range: [-1000, 1000]
+296 +         s as i32 - target // range: [-1000, 1000]
+    |
+
+warning: variable does not need to be mutable
+   --> src\lenet_i16.rs:204:9
+    |
+204 |     let mut exps: Vec<i32> = input.iter().map(|&x| {
+    |         ----^^^^
+    |         |
+    |         help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: associated function `print_image` is never used
+  --> src\mnist.rs:65:12
+   |
+18 | impl MnistDataset {
+   | ----------------- associated function in this implementation
+...
+65 |     pub fn print_image(image: &MnistImage) {
+   |            ^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: associated items `random` and `len` are never used
+  --> src\lenet_f32.rs:38:8
+   |
+36 | impl Tensor1 {
+   | ------------ associated items in this implementation
+37 |     fn zeros(len: usize) -> Self { Self { data: vec![0.0; len] } }
+38 |     fn random(len: usize, rng: &mut Rng, range: f32) -> Self {
+   |        ^^^^^^
+...
+41 |     fn len(&self) -> usize { self.data.len() }
+   |        ^^^
+
+warning: method `flat_len` is never used
+  --> src\lenet_f32.rs:65:8
+   |
+55 | impl Tensor3 {
+   | ------------ method in this implementation
+...
+65 |     fn flat_len(&self) -> usize { self.c * self.h * self.w }
+   |        ^^^^^^^^
+
+warning: field `fc3_out` is never read
+   --> src\lenet_f32.rs:285:5
+    |
+271 | struct ForwardCache {
+    |        ------------ field in this struct
+...
+285 |     fc3_out: Vec<f32>,
+    |     ^^^^^^^
+
+warning: field `rows` is never read
+  --> src\lenet_i16.rs:43:47
+   |
+43 | pub struct GTensor2 { pub data: Vec<i32>, pub rows: usize, pub cols: usize }
+   |            -------- field in this struct      ^^^^
+   |
+   = note: `GTensor2` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+
+warning: field `n` is never read
+  --> src\lenet_i16.rs:47:47
+   |
+47 | pub struct GTensor4 { pub data: Vec<i32>, pub n: usize, pub c: usize, pub h: usize, pub w: usize }
+   |            -------- field in this struct      ^
+   |
+   = note: `GTensor4` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+
+warning: associated function `random` is never used
+  --> src\lenet_i16.rs:51:8
+   |
+49 | impl ITensor1 {
+   | ------------- associated function in this implementation
+50 |     fn zeros(len: usize) -> Self { Self { data: vec![0; len] } }
+51 |     fn random(len: usize, rng: &mut Rng, range: i16) -> Self {
+   |        ^^^^^^
+
+warning: associated function `zeros` is never used
+  --> src\lenet_i16.rs:57:8
+   |
+56 | impl ITensor2 {
+   | ------------- associated function in this implementation
+57 |     fn zeros(rows: usize, cols: usize) -> Self {
+   |        ^^^^^
+
+warning: `ant-mnist` (bin "lenet-experiment") generated 10 warnings (run `cargo fix --bin "lenet-experiment" -p ant-mnist` to apply 2 suggestions)
+    Finished `release` profile [optimized] target(s) in 1.12s
+     Running `target\release\lenet-experiment.exe data`
+=== Dual LeNet-5 Experiment ===
+Loading MNIST...
+  train=60000, test=10000
+
+=== Phase 1: f32 LeNet-5 ===
+  weights: 44426 (177704 bytes, 173.5 KB)
+    10000/60000 (87.3%)
+    20000/60000 (91.2%)
+    30000/60000 (92.9%)
+    40000/60000 (93.9%)
+    50000/60000 (94.6%)
+    60000/60000 (95.1%)
+  Epoch  1 | train 95.1% | test 97.2% | 37s | 96.5MB
+         | d0:100% d1:99% d2:98% d3:98% d4:99% d5:98% d6:96% d7:92% d8:97% d9:95%
+    10000/60000 (97.7%)
+    20000/60000 (97.7%)
+    30000/60000 (97.9%)
+    40000/60000 (98.0%)
+    50000/60000 (98.0%)
+    60000/60000 (98.1%)
+  Epoch  2 | train 98.1% | test 98.2% | 36s | 96.5MB
+         | d0:100% d1:99% d2:99% d3:98% d4:99% d5:98% d6:96% d7:97% d8:97% d9:97%
+    10000/60000 (98.5%)
+    20000/60000 (98.5%)
+    30000/60000 (98.5%)
+    40000/60000 (98.5%)
+    50000/60000 (98.6%)
+    60000/60000 (98.6%)
+  Epoch  3 | train 98.6% | test 98.3% | 36s | 96.5MB
+         | d0:100% d1:99% d2:99% d3:97% d4:99% d5:99% d6:97% d7:98% d8:98% d9:97%
+    10000/60000 (98.8%)
+    20000/60000 (98.9%)
+    30000/60000 (98.8%)
+    40000/60000 (98.8%)
+    50000/60000 (98.8%)
+    60000/60000 (98.8%)
+  Epoch  4 | train 98.8% | test 98.6% | 36s | 96.5MB
+         | d0:100% d1:99% d2:99% d3:98% d4:98% d5:99% d6:98% d7:98% d8:98% d9:99%
+    10000/60000 (99.0%)
+    20000/60000 (99.1%)
+    30000/60000 (99.1%)
+    40000/60000 (99.1%)
+    50000/60000 (99.1%)
+    60000/60000 (99.1%)
+  Epoch  5 | train 99.1% | test 98.7% | 37s | 96.5MB
+         | d0:99% d1:99% d2:99% d3:98% d4:99% d5:99% d6:98% d7:99% d8:98% d9:98%
+    10000/60000 (99.1%)
+    20000/60000 (99.2%)
+    30000/60000 (99.2%)
+    40000/60000 (99.2%)
+    50000/60000 (99.2%)
+    60000/60000 (99.2%)
+  Epoch  6 | train 99.2% | test 98.8% | 36s | 96.5MB
+         | d0:99% d1:100% d2:98% d3:98% d4:99% d5:99% d6:99% d7:99% d8:98% d9:98%
+    10000/60000 (99.4%)
+    20000/60000 (99.4%)
+    30000/60000 (99.3%)
+    40000/60000 (99.3%)
+    50000/60000 (99.3%)
+    60000/60000 (99.3%)
+  Epoch  7 | train 99.3% | test 98.8% | 36s | 96.5MB
+         | d0:100% d1:100% d2:99% d3:99% d4:99% d5:98% d6:99% d7:98% d8:98% d9:98%
+    10000/60000 (99.1%)
+    20000/60000 (99.3%)
+    30000/60000 (99.3%)
+    40000/60000 (99.3%)
+    50000/60000 (99.3%)
+    60000/60000 (99.4%)
+  Epoch  8 | train 99.4% | test 98.8% | 37s | 96.5MB
+         | d0:99% d1:100% d2:99% d3:99% d4:99% d5:98% d6:98% d7:98% d8:99% d9:99%
+    10000/60000 (99.5%)
+    20000/60000 (99.5%)
+    30000/60000 (99.5%)
+    40000/60000 (99.4%)
+    50000/60000 (99.4%)
+    60000/60000 (99.4%)
+  Epoch  9 | train 99.4% | test 98.7% | 36s | 96.5MB
+         | d0:99% d1:100% d2:99% d3:99% d4:99% d5:99% d6:99% d7:98% d8:99% d9:97%
+    10000/60000 (99.2%)
+    20000/60000 (99.4%)
+    30000/60000 (99.4%)
+    40000/60000 (99.4%)
+    50000/60000 (99.4%)
+    60000/60000 (99.4%)
+  Epoch 10 | train 99.4% | test 98.8% | 37s | 96.5MB
+         | d0:99% d1:100% d2:98% d3:98% d4:99% d5:99% d6:99% d7:99% d8:99% d9:97%
+
+=== f32 LeNet-5 complete ===
+
+=== Phase 2: i16 LeNet-5 ===
+  weights: 44426 (88852 bytes, 86.8 KB)
+    10000/60000 (10.0%)
+    20000/60000 (10.2%)
+    30000/60000 (10.1%)
+    40000/60000 (10.1%)
+    50000/60000 (10.0%)
+    60000/60000 (10.0%)
+  Epoch  1 | train 10.0% | test 10.1% | 49s | 96.5MB
+         | d0:0% d1:0% d2:0% d3:0% d4:0% d5:0% d6:0% d7:0% d8:0% d9:100%
+    10000/60000 (9.8%)
+    20000/60000 (10.1%)
+    30000/60000 (10.0%)
+    40000/60000 (10.0%)
+    50000/60000 (10.0%)
+    60000/60000 (9.9%)
+  Epoch  2 | train 9.9% | test 10.1% | 49s | 96.5MB
+         | d0:0% d1:0% d2:0% d3:0% d4:0% d5:0% d6:0% d7:0% d8:0% d9:100%
+    10000/60000 (9.8%)
+    20000/60000 (10.1%)
+    30000/60000 (10.0%)
+    40000/60000 (10.0%)
+    50000/60000 (10.0%)
+    60000/60000 (9.9%)
+  Epoch  3 | train 9.9% | test 10.1% | 49s | 96.5MB
+         | d0:0% d1:0% d2:0% d3:0% d4:0% d5:0% d6:0% d7:0% d8:0% d9:100%
+    10000/60000 (9.8%)
+    20000/60000 (10.1%)
+    30000/60000 (10.0%)
+    40000/60000 (10.0%)
+    50000/60000 (10.0%)
+    60000/60000 (9.9%)
+  Epoch  4 | train 9.9% | test 10.1% | 48s | 96.5MB
+         | d0:0% d1:0% d2:0% d3:0% d4:0% d5:0% d6:0% d7:0% d8:0% d9:100%
+    10000/60000 (9.8%)
+    20000/60000 (10.1%)
+    30000/60000 (10.0%)
+    40000/60000 (10.0%)
+    50000/60000 (10.0%)
+    60000/60000 (9.9%)
+  Epoch  5 | train 9.9% | test 10.1% | 47s | 96.5MB
+         | d0:0% d1:0% d2:0% d3:0% d4:0% d5:0% d6:0% d7:0% d8:0% d9:100%
+    10000/60000 (9.8%)
+    20000/60000 (10.1%)
+    30000/60000 (10.0%)
+    40000/60000 (10.0%)
+    50000/60000 (10.0%)
+    60000/60000 (9.9%)
+  Epoch  6 | train 9.9% | test 10.1% | 47s | 96.5MB
+         | d0:0% d1:0% d2:0% d3:0% d4:0% d5:0% d6:0% d7:0% d8:0% d9:100%
+    10000/60000 (9.8%)
+    20000/60000 (10.1%)
+    30000/60000 (10.0%)
+    40000/60000 (10.0%)
+    50000/60000 (10.0%)
+    60000/60000 (9.9%)
+  Epoch  7 | train 9.9% | test 10.1% | 48s | 96.5MB
+         | d0:0% d1:0% d2:0% d3:0% d4:0% d5:0% d6:0% d7:0% d8:0% d9:100%
+    10000/60000 (9.8%)
+    20000/60000 (10.1%)
+    30000/60000 (10.0%)
+    40000/60000 (10.0%)
+    50000/60000 (10.0%)
+    60000/60000 (9.9%)
+  Epoch  8 | train 9.9% | test 10.1% | 48s | 96.5MB
+         | d0:0% d1:0% d2:0% d3:0% d4:0% d5:0% d6:0% d7:0% d8:0% d9:100%
+    10000/60000 (9.8%)
+    20000/60000 (10.1%)
+error: process didn't exit successfully: `target\release\lenet-experiment.exe data` (exit code: 1)
