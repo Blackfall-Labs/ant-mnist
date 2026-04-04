@@ -27,3 +27,7 @@ path = "src/viz.rs"
 [[bin]]
 name = "flow-experiment"
 path = "src/flow_experiment.rs"
+
+[[bin]]
+name = "lenet-experiment"
+path = "src/lenet_experiment.rs"
