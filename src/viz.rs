@@ -825,14 +825,42 @@ fn handle_cmd(
 }
 
 // ---------------------------------------------------------------------------
+// WebSocket state push
+// ---------------------------------------------------------------------------
+
+use std::net::TcpListener;
+use tungstenite::{accept, Message};
+
+fn refresh_state(
+    detectors: &mut Vec<Detector>,
+    finalizer: &Finalizer,
+    state: &Arc<Mutex<ControlState>>,
+) {
+    for d in detectors.iter_mut() { d.decay_activations(); }
+    let mut s = state.lock().unwrap();
+    s.detectors = detectors.iter().map(|d| d.get_viz()).collect();
+    s.finalizer = finalizer.get_viz();
+}
+
+fn push_state(
+    ws: &mut tungstenite::WebSocket<std::net::TcpStream>,
+    state: &Arc<Mutex<ControlState>>,
+) -> bool {
+    let s = state.lock().unwrap().clone();
+    let json = serde_json::to_string(&s).unwrap_or_else(|_| "{}".into());
+    ws.send(Message::Text(json.into())).is_ok()
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
 fn main() {
     let data_dir = std::env::args().nth(1).unwrap_or("data".into());
-    let port = std::env::args().nth(2).unwrap_or("8090".into());
+    let ws_port = std::env::args().nth(2).unwrap_or("8091".into());
+    let http_port = std::env::args().nth(3).unwrap_or("8090".into());
 
-    eprintln!("=== ANT-MNIST Control Room v2 ===");
+    eprintln!("=== ANT-MNIST Control Room v3 (WebSocket) ===");
     eprintln!("  Architecture: 10 correlation detectors → finalizer ANT");
     eprintln!("Loading MNIST...");
 
@@ -852,123 +880,144 @@ fn main() {
 
     state.lock().unwrap().detectors = detectors.iter().map(|d| d.get_viz()).collect();
 
-    let addr = format!("0.0.0.0:{}", port);
-    let server = Server::http(&addr).unwrap();
-    eprintln!("  Dashboard: http://localhost:{}", port);
+    // HTTP server for legacy HTML (background thread)
+    let http_addr = format!("0.0.0.0:{}", http_port);
+    thread::spawn(move || {
+        let server = Server::http(&http_addr).unwrap();
+        for request in server.incoming_requests() {
+            let html = include_str!("viz_specialist.html");
+            let _ = request.respond(Response::from_string(html)
+                .with_header(Header::from_bytes("Content-Type", "text/html").unwrap()));
+        }
+    });
+
+    // WebSocket server
+    let ws_addr = format!("0.0.0.0:{}", ws_port);
+    let listener = TcpListener::bind(&ws_addr).expect("failed to bind WS port");
+    eprintln!("  WebSocket: ws://localhost:{}", ws_port);
+    eprintln!("  HTTP:      http://localhost:{}", http_port);
     eprintln!("\n  Ready. 10 detectors COLD. Finalizer COLD.\n");
+    eprintln!("  Waiting for dashboard connection...\n");
 
-    let mut curriculum: Option<Curriculum> = None;
-
-    loop {
-        // Process HTTP requests (non-blocking when auto-training)
-        let timeout = if curriculum.is_some() {
-            std::time::Duration::from_millis(10)
-        } else {
-            std::time::Duration::from_secs(60)
+    // Accept connections in a loop (one client at a time)
+    for stream in listener.incoming() {
+        let stream = match stream {
+            Ok(s) => s,
+            Err(_) => continue,
         };
-        let maybe_request = server.recv_timeout(timeout).ok().flatten();
 
-        if let Some(mut request) = maybe_request {
-        let url = request.url().to_string();
-        let method = request.method().clone();
-        let cors = Header::from_bytes("Access-Control-Allow-Origin", "*").unwrap();
-        let json_ct = Header::from_bytes("Content-Type", "application/json").unwrap();
+        // Set non-blocking for command reads during auto-train
+        stream.set_nonblocking(false).ok();
+        let mut ws = match accept(stream) {
+            Ok(ws) => ws,
+            Err(_) => continue,
+        };
 
-        match (method, url.as_str()) {
-            (_, "/") => {
-                let html = include_str!("viz_specialist.html");
-                let _ = request.respond(Response::from_string(html)
-                    .with_header(Header::from_bytes("Content-Type", "text/html").unwrap()));
+        eprintln!("  Client connected.");
+
+        // Send initial state
+        refresh_state(&mut detectors, &finalizer, &state);
+        if !push_state(&mut ws, &state) { continue; }
+
+        let mut curriculum: Option<Curriculum> = None;
+
+        loop {
+            // Read commands (non-blocking when curriculum is active)
+            if curriculum.is_some() {
+                ws.get_mut().set_nonblocking(true).ok();
+            } else {
+                ws.get_mut().set_nonblocking(false).ok();
             }
-            (_, "/api/state") => {
-                // Decay activations and refresh detector + finalizer state each poll
-                for d in detectors.iter_mut() { d.decay_activations(); }
-                {
-                    let mut s = state.lock().unwrap();
-                    s.detectors = detectors.iter().map(|d| d.get_viz()).collect();
-                    s.finalizer = finalizer.get_viz();
-                }
 
-                let s = state.lock().unwrap().clone();
-                let json = serde_json::to_string(&s).unwrap_or_else(|_| "{}".into());
-                let _ = request.respond(Response::from_string(json).with_header(json_ct).with_header(cors));
-            }
-            (Method::Post, "/api/cmd") => {
-                let mut body = String::new();
-                request.as_reader().read_to_string(&mut body).ok();
-                let resp = if let Ok(cmd) = serde_json::from_str::<Cmd>(&body) {
-                    // Intercept auto_train/stop to manage curriculum
-                    match cmd.action.as_str() {
-                        "auto_train" => {
-                            let total = cmd.count.unwrap_or(100) as u32;
-                            if detectors[0].phase == Phase::Cold {
-                                let imprint_cmd = Cmd { action: "imprint".into(), digit: None, count: Some(50) };
-                                handle_cmd(&imprint_cmd, &mut detectors, &mut finalizer, &train, &test, &state);
+            match ws.read() {
+                Ok(Message::Text(text)) => {
+                    if let Ok(cmd) = serde_json::from_str::<Cmd>(&text) {
+                        match cmd.action.as_str() {
+                            "auto_train" => {
+                                let total = cmd.count.unwrap_or(100) as u32;
+                                if detectors[0].phase == Phase::Cold {
+                                    let imprint_cmd = Cmd { action: "imprint".into(), digit: None, count: Some(50) };
+                                    handle_cmd(&imprint_cmd, &mut detectors, &mut finalizer, &train, &test, &state);
+                                }
+                                let iso = (total * 40 / 100).max(3);
+                                let adv = (total * 30 / 100).max(3);
+                                let fin = total.saturating_sub(iso + adv).max(3);
+                                curriculum = Some(Curriculum::new(iso, adv, fin));
+                                log_msg(&state, format!("Auto-train: {} isolation → {} adversarial → {} finalizer",
+                                    iso, adv, fin));
                             }
-                            // 40% isolation, 30% adversarial, 30% finalizer
-                            let iso = (total * 40 / 100).max(3);
-                            let adv = (total * 30 / 100).max(3);
-                            let fin = total.saturating_sub(iso + adv).max(3);
-                            curriculum = Some(Curriculum::new(iso, adv, fin));
-                            log_msg(&state, format!("Auto-train: {} isolation → {} adversarial → {} finalizer",
-                                iso, adv, fin));
+                            "stop" => {
+                                curriculum = None;
+                                log_msg(&state, "Stopped auto-train".into());
+                            }
+                            _ => {
+                                handle_cmd(&cmd, &mut detectors, &mut finalizer, &train, &test, &state);
+                            }
                         }
-                        "stop" => {
-                            curriculum = None;
-                            log_msg(&state, "Stopped auto-train".into());
-                        }
-                        _ => {
-                            handle_cmd(&cmd, &mut detectors, &mut finalizer, &train, &test, &state);
-                        }
+                        // Push state after every command
+                        refresh_state(&mut detectors, &finalizer, &state);
+                        if !push_state(&mut ws, &state) { break; }
                     }
-                    Response::from_string(r#"{"ok":true}"#).with_header(json_ct).with_header(cors)
-                } else {
-                    Response::from_string(r#"{"error":"bad json"}"#)
-                        .with_header(json_ct).with_header(cors).with_status_code(400)
-                };
-                let _ = request.respond(resp);
-            }
-            _ => { let _ = request.respond(Response::from_string("404").with_status_code(404).with_header(cors)); }
-        }
-        } // end if let Some(request)
-
-        // Auto-training step: run one cycle per phase
-        if let Some(ref mut cur) = curriculum {
-            if cur.remaining_in_phase == 0 {
-                if !cur.advance_phase() {
-                    // All phases done — final eval
-                    let eval_cmd = Cmd { action: "evaluate".into(), digit: None, count: Some(1000) };
-                    handle_cmd(&eval_cmd, &mut detectors, &mut finalizer, &train, &test, &state);
-                    log_msg(&state, "Auto-train: complete".into());
-                    curriculum = None;
-                } else {
-                    log_msg(&state, format!("→ {}", cur.phase_name()));
                 }
+                Ok(Message::Close(_)) => {
+                    eprintln!("  Client disconnected.");
+                    break;
+                }
+                Err(tungstenite::Error::Io(ref e))
+                    if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    // No command waiting — continue to curriculum step
+                }
+                Err(_) => {
+                    eprintln!("  Client disconnected (error).");
+                    break;
+                }
+                _ => {}
             }
 
+            // Curriculum step
             if let Some(ref mut cur) = curriculum {
-                let action = match cur.phase {
-                    CurriculumPhase::Isolation => "train_isolation",
-                    CurriculumPhase::Adversarial => "train_adversarial",
-                    CurriculumPhase::Finalizer => "train_finalizer_only",
-                };
-                let count = match cur.phase {
-                    CurriculumPhase::Isolation => 200,
-                    CurriculumPhase::Adversarial => 50,
-                    CurriculumPhase::Finalizer => 200,
-                };
-                let cmd = Cmd { action: action.into(), digit: None, count: Some(count) };
-                handle_cmd(&cmd, &mut detectors, &mut finalizer, &train, &test, &state);
+                if cur.remaining_in_phase == 0 {
+                    if !cur.advance_phase() {
+                        let eval_cmd = Cmd { action: "evaluate".into(), digit: None, count: Some(1000) };
+                        handle_cmd(&eval_cmd, &mut detectors, &mut finalizer, &train, &test, &state);
+                        log_msg(&state, "Auto-train: complete".into());
+                        curriculum = None;
+                    } else {
+                        log_msg(&state, format!("→ {}", cur.phase_name()));
+                    }
+                }
 
-                cur.remaining_in_phase -= 1;
-                cur.step_in_phase += 1;
+                if let Some(ref mut cur) = curriculum {
+                    let action = match cur.phase {
+                        CurriculumPhase::Isolation => "train_isolation",
+                        CurriculumPhase::Adversarial => "train_adversarial",
+                        CurriculumPhase::Finalizer => "train_finalizer_only",
+                    };
+                    let count = match cur.phase {
+                        CurriculumPhase::Isolation => 200,
+                        CurriculumPhase::Adversarial => 50,
+                        CurriculumPhase::Finalizer => 200,
+                    };
+                    let cmd = Cmd { action: action.into(), digit: None, count: Some(count) };
+                    handle_cmd(&cmd, &mut detectors, &mut finalizer, &train, &test, &state);
 
-                // Eval every 5 steps
-                if cur.step_in_phase % 5 == 0 {
-                    let eval_cmd = Cmd { action: "evaluate".into(), digit: None, count: Some(1000) };
-                    handle_cmd(&eval_cmd, &mut detectors, &mut finalizer, &train, &test, &state);
+                    cur.remaining_in_phase -= 1;
+                    cur.step_in_phase += 1;
+
+                    // Eval every 5 steps
+                    if cur.step_in_phase % 5 == 0 {
+                        let eval_cmd = Cmd { action: "evaluate".into(), digit: None, count: Some(1000) };
+                        handle_cmd(&eval_cmd, &mut detectors, &mut finalizer, &train, &test, &state);
+                    }
+
+                    // Push state after every training step — real-time updates
+                    refresh_state(&mut detectors, &finalizer, &state);
+                    if !push_state(&mut ws, &state) { break; }
                 }
             }
         }
-    } // end loop
+        // Client disconnected — reset curriculum, wait for next connection
+        curriculum = None;
+        eprintln!("  Waiting for dashboard connection...\n");
+    }
 }

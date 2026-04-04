@@ -14,47 +14,71 @@ const EMPTY_STATE: ControlState = {
   log: [],
 };
 
-export function useControlState(pollInterval = 2000) {
+export function useControlState() {
   const [state, setState] = useState<ControlState>(EMPTY_STATE);
   const [connected, setConnected] = useState(false);
-  const mountedRef = useRef(true);
-
-  const poll = useCallback(async () => {
-    try {
-      const r = await fetch("/api/state");
-      if (!mountedRef.current) return;
-      const data: ControlState = await r.json();
-      setState(data);
-      setConnected(true);
-    } catch {
-      if (mountedRef.current) setConnected(false);
-    }
-  }, []);
+  const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    mountedRef.current = true;
-    poll();
-    const id = setInterval(poll, pollInterval);
+    let cancelled = false;
+    let reconnectTimer: ReturnType<typeof setTimeout>;
+
+    function connect() {
+      if (cancelled) return;
+      const wsUrl = `ws://${window.location.hostname}:8091`;
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        if (!cancelled) setConnected(true);
+      };
+
+      ws.onmessage = (event) => {
+        if (cancelled) return;
+        try {
+          const data: ControlState = JSON.parse(event.data);
+          setState(data);
+        } catch {
+          // ignore malformed messages
+        }
+      };
+
+      ws.onclose = () => {
+        if (cancelled) return;
+        setConnected(false);
+        wsRef.current = null;
+        reconnectTimer = setTimeout(connect, 2000);
+      };
+
+      ws.onerror = () => {
+        ws.close();
+      };
+    }
+
+    connect();
+
     return () => {
-      mountedRef.current = false;
-      clearInterval(id);
+      cancelled = true;
+      clearTimeout(reconnectTimer);
+      if (wsRef.current) {
+        wsRef.current.onclose = null; // prevent reconnect on cleanup
+        wsRef.current.close();
+        wsRef.current = null;
+      }
     };
-  }, [poll, pollInterval]);
+  }, []);
 
   const sendCmd = useCallback(
     async (action: string, digit?: number, count?: number) => {
+      const ws = wsRef.current;
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
       const body: Record<string, unknown> = { action };
       if (digit !== undefined) body.digit = digit;
       if (count !== undefined) body.count = count;
-      await fetch("/api/cmd", {
-        method: "POST",
-        body: JSON.stringify(body),
-        headers: { "Content-Type": "application/json" },
-      });
-      // Poll shortly after command completes
-      setTimeout(poll, 300);
+      ws.send(JSON.stringify(body));
     },
-    [poll]
+    []
   );
 
   return { state, connected, sendCmd };

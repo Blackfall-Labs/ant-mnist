@@ -15,6 +15,11 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       "/api": "http://localhost:8090",
+      "/ws": {
+        target: "ws://localhost:8091",
+        ws: true,
+        rewrite: (path) => path.replace(/^\/ws/, ""),
+      },
     },
   },
   build: {
