@@ -40,3 +40,7 @@ path = "src/lenet_sweep.rs"
 [[bin]]
 name = "lenet-ensemble"
 path = "src/lenet_ensemble.rs"
+
+[[bin]]
+name = "lenet-thermal"
+path = "src/lenet_thermal.rs"

@@ -1,0 +1,104 @@
+warning: use of deprecated associated function `Signal::from_i16`: defaults multiplier to 1 — use Signal::from_signed_i32(val) for large ranges or construct with explicit multiplier
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:437:15
+    |
+437 |         Self::from_i16(delta)
+    |               ^^^^^^^^
+    |
+    = note: `#[warn(deprecated)]` on by default
+
+warning: use of deprecated associated function `Signal::positive`: use Signal::positive_amplified(mag, mul) — s = p × m × k requires all three values
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:452:19
+    |
+452 |             Self::positive(magnitude)
+    |                   ^^^^^^^^
+
+warning: use of deprecated associated function `Signal::from_spike_rate`: defaults multiplier to 1 — construct Signal with explicit multiplier instead
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:464:15
+    |
+464 |         Self::from_spike_rate(rate_hz, max_rate_hz)
+    |               ^^^^^^^^^^^^^^^
+
+warning: use of deprecated associated function `Signal::from_signed_i32`: defaults multiplier to 1 — use Signal::from_current(val) for full p × m × k range
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:583:15
+    |
+583 |         Self::from_signed_i32(a + b)
+    |               ^^^^^^^^^^^^^^^
+
+warning: use of deprecated associated function `Signal::from_signed_i32`: defaults multiplier to 1 — use Signal::from_current(val) for full p × m × k range
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:632:36
+    |
+632 |             let mut result = Self::from_signed_i32((current + delta as i16) as i32);
+    |                                    ^^^^^^^^^^^^^^^
+
+warning: use of deprecated associated function `Signal::from_signed_i32`: defaults multiplier to 1 — use Signal::from_current(val) for full p × m × k range
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:636:36
+    |
+636 |             let mut result = Self::from_signed_i32((current - delta as i16) as i32);
+    |                                    ^^^^^^^^^^^^^^^
+
+warning: `ternary-signal` (lib) generated 6 warnings
+warning: field `vector_width` is never read
+  --> E:\repos\blackfall-labs\atomic-neural-transistors\src\memory.rs:47:5
+   |
+38 | pub struct MemoryANT {
+   |            --------- field in this struct
+...
+47 |     vector_width: u16,
+   |     ^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: method `resolve_path` is never used
+  --> E:\repos\blackfall-labs\atomic-neural-transistors\src\modules\ant_ml.rs:97:8
+   |
+80 | impl AntRuntime {
+   | --------------- method in this implementation
+...
+97 |     fn resolve_path(&self, path: &str) -> PathBuf {
+   |        ^^^^^^^^^^^^
+
+warning: `atomic-neural-transistors` (lib) generated 2 warnings
+   Compiling ant-mnist v0.1.0 (E:\repos\blackfall-labs\ant-mnist)
+warning: unused imports: `Arc` and `Mutex`
+  --> src\lenet_thermal.rs:11:17
+   |
+11 | use std::sync::{Arc, Mutex};
+   |                 ^^^  ^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `train_s`
+   --> src\lenet_thermal.rs:302:13
+    |
+302 |         let train_s = t0.elapsed().as_secs_f64();
+    |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_train_s`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: associated function `print_image` is never used
+  --> src\mnist.rs:65:12
+   |
+18 | impl MnistDataset {
+   | ----------------- associated function in this implementation
+...
+65 |     pub fn print_image(image: &MnistImage) {
+   |            ^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `ant-mnist` (bin "lenet-thermal") generated 3 warnings (run `cargo fix --bin "lenet-thermal" -p ant-mnist` to apply 2 suggestions)
+    Finished `release` profile [optimized] target(s) in 1.97s
+     Running `target\release\lenet-thermal.exe data 10 3`
+=== Thermal Ensemble LeNet-5: 10 voters, 3 epochs ===
+  ThermalWeight size: 12 bytes
+Loading MNIST...
+  train=60000, test=10000
+  thermal output: 840 weights, 10080 bytes (9.8 KB)
+  E 1 | train 10.9% | test 9.2% | 57s | nz 5850 | s:600000 t:70272558 | H/W/C/F 6210/1748/442/0 | 96.9MB
+      | d0:6% d1:0% d2:3% d3:0% d4:2% d5:0% d6:17% d7:1% d8:0% d9:62%
+  E 2 | train 13.3% | test 25.3% | 57s | nz 5219 | s:1200000 t:90077883 | H/W/C/F 5190/1006/685/1519 | 96.9MB
+      | d0:31% d1:24% d2:5% d3:22% d4:4% d5:51% d6:27% d7:28% d8:38% d9:27%
+  E 3 | train 17.0% | test 35.1% | 57s | nz 5213 | s:1800000 t:93769643 | H/W/C/F 4790/606/617/2387 | 96.9MB
+      | d0:28% d1:43% d2:11% d3:19% d4:21% d5:29% d6:67% d7:24% d8:53% d9:57%
+
+=== Thermal Ensemble complete ===
