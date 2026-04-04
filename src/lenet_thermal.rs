@@ -189,28 +189,17 @@ impl ThermalLeNet {
         let predicted = out.iter().enumerate().max_by_key(|(_, &s)| s).map(|(i, _)| i).unwrap_or(0);
         let correct = predicted == label;
 
-        // Convert to Signal arrays for thermal mastery
+        // Convert features to Signal for thermal mastery
         let input_signals: Vec<Signal> = feats.iter()
             .map(|&v| Signal::from_current(v as i32))
             .collect();
-        let output_signals: Vec<Signal> = out.iter()
-            .map(|&v| Signal::from_current(v as i32))
-            .collect();
 
-        // Target: +40 for correct class, -20 for others
-        let target_signals: Vec<Signal> = (0..10).map(|i| {
-            if i == label {
-                Signal::from_current(40)
-            } else {
-                Signal::from_current(-20)
-            }
-        }).collect();
-
-        self.output_mastery.update(
+        // Selective update: only touch correct class + predicted class
+        self.output_mastery.update_selective(
             &mut self.output_weights,
             &input_signals,
-            &output_signals,
-            &target_signals,
+            label,
+            predicted,
             correct,
         );
 
