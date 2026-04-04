@@ -1,0 +1,505 @@
+warning: use of deprecated associated function `Signal::from_i16`: defaults multiplier to 1 — use Signal::from_signed_i32(val) for large ranges or construct with explicit multiplier
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:437:15
+    |
+437 |         Self::from_i16(delta)
+    |               ^^^^^^^^
+    |
+    = note: `#[warn(deprecated)]` on by default
+
+warning: use of deprecated associated function `Signal::positive`: use Signal::positive_amplified(mag, mul) — s = p × m × k requires all three values
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:452:19
+    |
+452 |             Self::positive(magnitude)
+    |                   ^^^^^^^^
+
+warning: use of deprecated associated function `Signal::from_spike_rate`: defaults multiplier to 1 — construct Signal with explicit multiplier instead
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:464:15
+    |
+464 |         Self::from_spike_rate(rate_hz, max_rate_hz)
+    |               ^^^^^^^^^^^^^^^
+
+warning: use of deprecated associated function `Signal::from_signed_i32`: defaults multiplier to 1 — use Signal::from_current(val) for full p × m × k range
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:583:15
+    |
+583 |         Self::from_signed_i32(a + b)
+    |               ^^^^^^^^^^^^^^^
+
+warning: use of deprecated associated function `Signal::from_signed_i32`: defaults multiplier to 1 — use Signal::from_current(val) for full p × m × k range
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:632:36
+    |
+632 |             let mut result = Self::from_signed_i32((current + delta as i16) as i32);
+    |                                    ^^^^^^^^^^^^^^^
+
+warning: use of deprecated associated function `Signal::from_signed_i32`: defaults multiplier to 1 — use Signal::from_current(val) for full p × m × k range
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:636:36
+    |
+636 |             let mut result = Self::from_signed_i32((current - delta as i16) as i32);
+    |                                    ^^^^^^^^^^^^^^^
+
+warning: `ternary-signal` (lib) generated 6 warnings
+warning: field `vector_width` is never read
+  --> E:\repos\blackfall-labs\atomic-neural-transistors\src\memory.rs:47:5
+   |
+38 | pub struct MemoryANT {
+   |            --------- field in this struct
+...
+47 |     vector_width: u16,
+   |     ^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: method `resolve_path` is never used
+  --> E:\repos\blackfall-labs\atomic-neural-transistors\src\modules\ant_ml.rs:97:8
+   |
+80 | impl AntRuntime {
+   | --------------- method in this implementation
+...
+97 |     fn resolve_path(&self, path: &str) -> PathBuf {
+   |        ^^^^^^^^^^^^
+
+warning: `atomic-neural-transistors` (lib) generated 2 warnings
+warning: unused variable: `ic`
+   --> src\lenet_i16.rs:188:38
+    |
+188 |     fn forward(&self, input: &[i16], ic: usize, ih: usize, iw: usize) -> (Vec<i16>, usize, usize, usize) {
+    |                                      ^^ help: if this is intentional, prefix it with an underscore: `_ic`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `evaluate` is never used
+  --> src\lenet_experiment.rs:37:4
+   |
+37 | fn evaluate(net: &LeNetF32, test: &MnistDataset, count: usize) -> (f64, [f64; 10]) {
+   |    ^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: associated function `print_image` is never used
+  --> src\mnist.rs:65:12
+   |
+18 | impl MnistDataset {
+   | ----------------- associated function in this implementation
+...
+65 |     pub fn print_image(image: &MnistImage) {
+   |            ^^^^^^^^^^^
+
+warning: struct `Rng` is never constructed
+ --> src\lenet_f32.rs:7:8
+  |
+7 | struct Rng(u64);
+  |        ^^^
+
+warning: associated items `new`, `next_u64`, and `uniform` are never used
+  --> src\lenet_f32.rs:9:8
+   |
+ 8 | impl Rng {
+   | -------- associated items in this implementation
+ 9 |     fn new(seed: u64) -> Self { Self(seed) }
+   |        ^^^
+10 |     fn next_u64(&mut self) -> u64 {
+   |        ^^^^^^^^
+...
+17 |     fn uniform(&mut self, range: f32) -> f32 {
+   |        ^^^^^^^
+
+warning: struct `Tensor1` is never constructed
+  --> src\lenet_f32.rs:28:12
+   |
+28 | pub struct Tensor1 { pub data: Vec<f32> }
+   |            ^^^^^^^
+
+warning: struct `Tensor2` is never constructed
+  --> src\lenet_f32.rs:30:12
+   |
+30 | pub struct Tensor2 { pub data: Vec<f32>, pub rows: usize, pub cols: usize }
+   |            ^^^^^^^
+
+warning: struct `Tensor3` is never constructed
+  --> src\lenet_f32.rs:32:12
+   |
+32 | pub struct Tensor3 { pub data: Vec<f32>, pub c: usize, pub h: usize, pub w: usize }
+   |            ^^^^^^^
+
+warning: struct `Tensor4` is never constructed
+  --> src\lenet_f32.rs:34:12
+   |
+34 | pub struct Tensor4 { pub data: Vec<f32>, pub n: usize, pub c: usize, pub h: usize, pub w: usize }
+   |            ^^^^^^^
+
+warning: associated items `zeros`, `random`, and `len` are never used
+  --> src\lenet_f32.rs:37:8
+   |
+36 | impl Tensor1 {
+   | ------------ associated items in this implementation
+37 |     fn zeros(len: usize) -> Self { Self { data: vec![0.0; len] } }
+   |        ^^^^^
+38 |     fn random(len: usize, rng: &mut Rng, range: f32) -> Self {
+   |        ^^^^^^
+...
+41 |     fn len(&self) -> usize { self.data.len() }
+   |        ^^^
+
+warning: associated items `zeros`, `random`, `at`, and `at_mut` are never used
+  --> src\lenet_f32.rs:45:8
+   |
+44 | impl Tensor2 {
+   | ------------ associated items in this implementation
+45 |     fn zeros(rows: usize, cols: usize) -> Self {
+   |        ^^^^^
+...
+48 |     fn random(rows: usize, cols: usize, rng: &mut Rng, range: f32) -> Self {
+   |        ^^^^^^
+...
+51 |     fn at(&self, r: usize, c: usize) -> f32 { self.data[r * self.cols + c] }
+   |        ^^
+52 |     fn at_mut(&mut self, r: usize, c: usize) -> &mut f32 { &mut self.data[r * self.cols + c] }
+   |        ^^^^^^
+
+warning: associated items `zeros`, `at`, `at_mut`, and `flat_len` are never used
+  --> src\lenet_f32.rs:56:8
+   |
+55 | impl Tensor3 {
+   | ------------ associated items in this implementation
+56 |     fn zeros(c: usize, h: usize, w: usize) -> Self {
+   |        ^^^^^
+...
+59 |     fn at(&self, c: usize, y: usize, x: usize) -> f32 {
+   |        ^^
+...
+62 |     fn at_mut(&mut self, c: usize, y: usize, x: usize) -> &mut f32 {
+   |        ^^^^^^
+...
+65 |     fn flat_len(&self) -> usize { self.c * self.h * self.w }
+   |        ^^^^^^^^
+
+warning: associated items `zeros`, `random`, `at`, and `at_mut` are never used
+  --> src\lenet_f32.rs:69:8
+   |
+68 | impl Tensor4 {
+   | ------------ associated items in this implementation
+69 |     fn zeros(n: usize, c: usize, h: usize, w: usize) -> Self {
+   |        ^^^^^
+...
+72 |     fn random(n: usize, c: usize, h: usize, w: usize, rng: &mut Rng, range: f32) -> Self {
+   |        ^^^^^^
+...
+75 |     fn at(&self, n: usize, c: usize, y: usize, x: usize) -> f32 {
+   |        ^^
+...
+78 |     fn at_mut(&mut self, n: usize, c: usize, y: usize, x: usize) -> &mut f32 {
+   |        ^^^^^^
+
+warning: function `conv2d_forward` is never used
+  --> src\lenet_f32.rs:88:4
+   |
+88 | fn conv2d_forward(input: &Tensor3, kernel: &Tensor4, bias: &Tensor1) -> Tensor3 {
+   |    ^^^^^^^^^^^^^^
+
+warning: function `conv2d_backward` is never used
+   --> src\lenet_f32.rs:112:4
+    |
+112 | fn conv2d_backward(
+    |    ^^^^^^^^^^^^^^^
+
+warning: function `relu_forward` is never used
+   --> src\lenet_f32.rs:141:4
+    |
+141 | fn relu_forward(input: &Tensor3) -> Tensor3 {
+    |    ^^^^^^^^^^^^
+
+warning: function `relu_backward` is never used
+   --> src\lenet_f32.rs:149:4
+    |
+149 | fn relu_backward(input: &Tensor3, d_output: &Tensor3) -> Tensor3 {
+    |    ^^^^^^^^^^^^^
+
+warning: function `avgpool_forward` is never used
+   --> src\lenet_f32.rs:158:4
+    |
+158 | fn avgpool_forward(input: &Tensor3) -> Tensor3 {
+    |    ^^^^^^^^^^^^^^^
+
+warning: function `avgpool_backward` is never used
+   --> src\lenet_f32.rs:178:4
+    |
+178 | fn avgpool_backward(d_output: &Tensor3, in_h: usize, in_w: usize) -> Tensor3 {
+    |    ^^^^^^^^^^^^^^^^
+
+warning: function `fc_forward` is never used
+   --> src\lenet_f32.rs:195:4
+    |
+195 | fn fc_forward(input: &[f32], weights: &Tensor2, bias: &Tensor1) -> Vec<f32> {
+    |    ^^^^^^^^^^
+
+warning: function `fc_backward` is never used
+   --> src\lenet_f32.rs:208:4
+    |
+208 | fn fc_backward(input: &[f32], weights: &Tensor2, d_output: &[f32]) -> (Tensor2, Tensor1, Vec<f32>) {
+    |    ^^^^^^^^^^^
+
+warning: function `relu_vec` is never used
+   --> src\lenet_f32.rs:224:4
+    |
+224 | fn relu_vec(input: &[f32]) -> Vec<f32> {
+    |    ^^^^^^^^
+
+warning: function `relu_vec_backward` is never used
+   --> src\lenet_f32.rs:229:4
+    |
+229 | fn relu_vec_backward(input: &[f32], d_output: &[f32]) -> Vec<f32> {
+    |    ^^^^^^^^^^^^^^^^^
+
+warning: function `softmax` is never used
+   --> src\lenet_f32.rs:236:4
+    |
+236 | fn softmax(input: &[f32]) -> Vec<f32> {
+    |    ^^^^^^^
+
+warning: function `cross_entropy_gradient` is never used
+   --> src\lenet_f32.rs:244:4
+    |
+244 | fn cross_entropy_gradient(softmax_output: &[f32], label: usize) -> Vec<f32> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `LeNetF32` is never constructed
+   --> src\lenet_f32.rs:254:12
+    |
+254 | pub struct LeNetF32 {
+    |            ^^^^^^^^
+
+warning: struct `ForwardCache` is never constructed
+   --> src\lenet_f32.rs:271:8
+    |
+271 | struct ForwardCache {
+    |        ^^^^^^^^^^^^
+
+warning: associated items `new`, `forward_cached`, `predict`, `train_one`, and `weight_stats` are never used
+   --> src\lenet_f32.rs:290:12
+    |
+289 | impl LeNetF32 {
+    | ------------- associated items in this implementation
+290 |     pub fn new(seed: u64) -> Self {
+    |            ^^^
+...
+313 |     fn forward_cached(&self, image: &[u8]) -> (usize, ForwardCache) {
+    |        ^^^^^^^^^^^^^^
+...
+362 |     pub fn predict(&self, image: &[u8]) -> usize {
+    |            ^^^^^^^
+...
+367 |     pub fn train_one(&mut self, image: &[u8], label: usize, lr: f32) -> (usize, bool) {
+    |            ^^^^^^^^^
+...
+417 |     pub fn weight_stats(&self) -> WeightStats {
+    |            ^^^^^^^^^^^^
+
+warning: function `sgd_update` is never used
+   --> src\lenet_f32.rs:438:4
+    |
+438 | fn sgd_update(weights: &mut [f32], gradients: &[f32], lr: f32) {
+    |    ^^^^^^^^^^
+
+warning: struct `WeightStats` is never constructed
+   --> src\lenet_f32.rs:444:12
+    |
+444 | pub struct WeightStats {
+    |            ^^^^^^^^^^^
+
+warning: associated function `zeros` is never used
+  --> src\lenet_mastery.rs:39:8
+   |
+38 | impl T1 {
+   | ------- associated function in this implementation
+39 |     fn zeros(len: usize) -> Self { Self { data: vec![0; len] } }
+   |        ^^^^^
+
+warning: method `apply_transition` is never used
+   --> src\lenet_mastery.rs:264:8
+    |
+165 | impl MasteryLayer {
+    | ----------------- method in this implementation
+...
+264 |     fn apply_transition(&mut self, idx: usize, needed: i8) {
+    |        ^^^^^^^^^^^^^^^^
+
+warning: `ant-mnist` (bin "lenet-experiment") generated 32 warnings (run `cargo fix --bin "lenet-experiment" -p ant-mnist` to apply 1 suggestion)
+    Finished `release` profile [optimized] target(s) in 0.08s
+     Running `target\release\lenet-experiment.exe data`
+=== Dual LeNet-5 Experiment ===
+Loading MNIST...
+  train=60000, test=10000
+
+=== Phase 2: P×M×K Signal LeNet-5 (frozen conv + basin learning) ===
+  total weights: 44190 (258.9 KB)
+  plastic weights: 840 (FC3 output layer)
+  SignalWeight size: 6 bytes
+    10000/60000 (32.6%)
+    20000/60000 (33.0%)
+    30000/60000 (33.6%)
+    40000/60000 (33.7%)
+    50000/60000 (33.9%)
+    60000/60000 (34.2%)
+  Epoch  1 | train 34.2% | test 31.7% | 23s | nz 686/840 | H/W/C/F 267/35/24/514 | s:60000 t:2225010 | 96.5MB
+         | d0:0% d1:0% d2:0% d3:6% d4:11% d5:18% d6:77% d7:57% d8:63% d9:90%
+    10000/60000 (35.3%)
+    20000/60000 (35.0%)
+    30000/60000 (35.2%)
+    40000/60000 (35.0%)
+    50000/60000 (35.0%)
+    60000/60000 (35.2%)
+  Epoch  2 | train 35.2% | test 32.4% | 23s | nz 693/840 | H/W/C/F 240/30/15/555 | s:120000 t:4436191 | 96.5MB
+         | d0:0% d1:0% d2:0% d3:4% d4:10% d5:18% d6:79% d7:61% d8:72% d9:85%
+    10000/60000 (35.4%)
+    20000/60000 (35.0%)
+    30000/60000 (35.1%)
+    40000/60000 (34.9%)
+    50000/60000 (34.9%)
+    60000/60000 (35.0%)
+  Epoch  3 | train 35.0% | test 31.2% | 23s | nz 695/840 | H/W/C/F 220/30/19/571 | s:180000 t:6650850 | 96.5MB
+         | d0:0% d1:0% d2:0% d3:3% d4:9% d5:18% d6:79% d7:56% d8:65% d9:88%
+    10000/60000 (35.1%)
+    20000/60000 (34.7%)
+    30000/60000 (34.8%)
+    40000/60000 (34.6%)
+    50000/60000 (34.6%)
+    60000/60000 (34.8%)
+  Epoch  4 | train 34.8% | test 30.7% | 23s | nz 693/840 | H/W/C/F 213/27/18/582 | s:240000 t:8868456 | 96.5MB
+         | d0:0% d1:0% d2:0% d3:2% d4:7% d5:16% d6:78% d7:55% d8:67% d9:87%
+    10000/60000 (34.9%)
+    20000/60000 (34.6%)
+    30000/60000 (34.7%)
+    40000/60000 (34.5%)
+    50000/60000 (34.5%)
+    60000/60000 (34.7%)
+  Epoch  5 | train 34.7% | test 31.1% | 23s | nz 695/840 | H/W/C/F 207/20/20/593 | s:300000 t:11087444 | 96.5MB
+         | d0:0% d1:0% d2:0% d3:3% d4:7% d5:17% d6:77% d7:56% d8:70% d9:86%
+    10000/60000 (34.9%)
+    20000/60000 (34.6%)
+    30000/60000 (34.7%)
+    40000/60000 (34.5%)
+    50000/60000 (34.4%)
+    60000/60000 (34.6%)
+  Epoch  6 | train 34.6% | test 31.6% | 23s | nz 695/840 | H/W/C/F 206/15/18/601 | s:360000 t:13307709 | 96.5MB
+         | d0:0% d1:0% d2:0% d3:4% d4:9% d5:19% d6:81% d7:55% d8:67% d9:86%
+    10000/60000 (34.9%)
+    20000/60000 (34.6%)
+    30000/60000 (34.7%)
+    40000/60000 (34.5%)
+    50000/60000 (34.5%)
+    60000/60000 (34.6%)
+  Epoch  7 | train 34.6% | test 31.6% | 23s | nz 693/840 | H/W/C/F 198/18/16/608 | s:420000 t:15528016 | 96.5MB
+         | d0:0% d1:0% d2:0% d3:3% d4:8% d5:18% d6:80% d7:57% d8:71% d9:83%
+    10000/60000 (34.9%)
+    20000/60000 (34.5%)
+    30000/60000 (34.6%)
+    40000/60000 (34.4%)
+    50000/60000 (34.4%)
+    60000/60000 (34.5%)
+  Epoch  8 | train 34.5% | test 31.3% | 23s | nz 694/840 | H/W/C/F 195/19/13/613 | s:480000 t:17749034 | 96.5MB
+         | d0:0% d1:0% d2:0% d3:3% d4:9% d5:17% d6:81% d7:56% d8:67% d9:85%
+    10000/60000 (34.8%)
+    20000/60000 (34.4%)
+    30000/60000 (34.5%)
+    40000/60000 (34.3%)
+    50000/60000 (34.2%)
+    60000/60000 (34.4%)
+  Epoch  9 | train 34.4% | test 32.3% | 23s | nz 695/840 | H/W/C/F 191/20/10/619 | s:540000 t:19971523 | 96.5MB
+         | d0:0% d1:0% d2:0% d3:3% d4:11% d5:20% d6:82% d7:58% d8:73% d9:82%
+    10000/60000 (34.7%)
+    20000/60000 (34.4%)
+    30000/60000 (34.6%)
+    40000/60000 (34.3%)
+    50000/60000 (34.3%)
+    60000/60000 (34.4%)
+  Epoch 10 | train 34.4% | test 31.1% | 23s | nz 696/840 | H/W/C/F 191/16/11/622 | s:600000 t:22194037 | 96.5MB
+         | d0:0% d1:0% d2:0% d3:2% d4:8% d5:16% d6:83% d7:56% d8:65% d9:85%
+
+=== P×M×K Signal LeNet-5 complete ===
+
+=== Phase 3: Mastery LeNet-5 (frozen random + mastery output) ===
+  total weights: 44426 (86.8 KB)
+  plastic weights: 850 (output layer only)
+    10000/60000 (65.5%)
+    20000/60000 (65.9%)
+    30000/60000 (66.3%)
+    40000/60000 (65.2%)
+    50000/60000 (64.5%)
+    60000/60000 (64.4%)
+  Epoch  1 | train 64.4% | test 64.7% | 15s | nz 493/850 | s:60000 t:218712 | 96.5MB
+         | d0:90% d1:72% d2:84% d3:79% d4:63% d5:51% d6:63% d7:73% d8:18% d9:48%
+    10000/60000 (62.8%)
+    20000/60000 (62.4%)
+    30000/60000 (62.6%)
+    40000/60000 (62.4%)
+    50000/60000 (62.3%)
+    60000/60000 (62.7%)
+  Epoch  2 | train 62.7% | test 66.8% | 15s | nz 514/850 | s:120000 t:435055 | 96.5MB
+         | d0:88% d1:77% d2:81% d3:73% d4:61% d5:56% d6:66% d7:71% d8:34% d9:57%
+    10000/60000 (63.2%)
+    20000/60000 (62.6%)
+    30000/60000 (62.6%)
+    40000/60000 (62.4%)
+    50000/60000 (62.3%)
+    60000/60000 (62.7%)
+  Epoch  3 | train 62.7% | test 65.5% | 15s | nz 522/850 | s:180000 t:650902 | 96.5MB
+         | d0:88% d1:74% d2:84% d3:75% d4:49% d5:54% d6:73% d7:74% d8:36% d9:46%
+    10000/60000 (62.9%)
+    20000/60000 (62.3%)
+    30000/60000 (62.3%)
+    40000/60000 (62.1%)
+    50000/60000 (62.1%)
+    60000/60000 (62.4%)
+  Epoch  4 | train 62.4% | test 64.9% | 15s | nz 528/850 | s:240000 t:865543 | 96.5MB
+         | d0:86% d1:74% d2:87% d3:68% d4:47% d5:59% d6:70% d7:69% d8:35% d9:52%
+    10000/60000 (62.6%)
+    20000/60000 (62.0%)
+    30000/60000 (62.0%)
+    40000/60000 (61.8%)
+    50000/60000 (61.7%)
+    60000/60000 (62.0%)
+  Epoch  5 | train 62.0% | test 65.0% | 16s | nz 535/850 | s:300000 t:1078874 | 96.5MB
+         | d0:85% d1:74% d2:84% d3:67% d4:46% d5:57% d6:73% d7:78% d8:40% d9:41%
+    10000/60000 (62.4%)
+    20000/60000 (61.7%)
+    30000/60000 (61.6%)
+    40000/60000 (61.5%)
+    50000/60000 (61.5%)
+    60000/60000 (61.8%)
+  Epoch  6 | train 61.8% | test 65.1% | 15s | nz 540/850 | s:360000 t:1291142 | 96.5MB
+         | d0:83% d1:74% d2:87% d3:69% d4:43% d5:49% d6:77% d7:74% d8:35% d9:56%
+    10000/60000 (62.7%)
+    20000/60000 (61.7%)
+    30000/60000 (61.6%)
+    40000/60000 (61.3%)
+    50000/60000 (61.3%)
+    60000/60000 (61.6%)
+  Epoch  7 | train 61.6% | test 65.7% | 15s | nz 543/850 | s:420000 t:1502551 | 96.5MB
+         | d0:84% d1:77% d2:85% d3:70% d4:46% d5:52% d6:76% d7:74% d8:36% d9:54%
+    10000/60000 (62.1%)
+    20000/60000 (61.4%)
+    30000/60000 (61.4%)
+    40000/60000 (61.3%)
+    50000/60000 (61.1%)
+    60000/60000 (61.5%)
+  Epoch  8 | train 61.5% | test 65.3% | 15s | nz 545/850 | s:480000 t:1713530 | 96.5MB
+         | d0:82% d1:77% d2:84% d3:71% d4:40% d5:52% d6:76% d7:77% d8:36% d9:54%
+    10000/60000 (62.2%)
+    20000/60000 (61.5%)
+    30000/60000 (61.5%)
+    40000/60000 (61.3%)
+    50000/60000 (61.1%)
+    60000/60000 (61.4%)
+  Epoch  9 | train 61.4% | test 64.6% | 15s | nz 548/850 | s:540000 t:1924154 | 96.5MB
+         | d0:82% d1:79% d2:84% d3:75% d4:37% d5:43% d6:78% d7:72% d8:37% d9:53%
+    10000/60000 (62.3%)
+    20000/60000 (61.4%)
+    30000/60000 (61.3%)
+    40000/60000 (61.2%)
+    50000/60000 (61.0%)
+    60000/60000 (61.3%)
+  Epoch 10 | train 61.3% | test 64.6% | 15s | nz 550/850 | s:600000 t:2134631 | 96.5MB
+         | d0:84% d1:82% d2:83% d3:74% d4:38% d5:46% d6:78% d7:66% d8:34% d9:55%
+
+=== Mastery LeNet-5 complete ===
+
+=== All experiments complete ===

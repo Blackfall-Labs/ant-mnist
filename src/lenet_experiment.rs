@@ -80,67 +80,21 @@ fn main() {
     ).expect("load test");
     eprintln!("  train={}, test={}", train.len(), test.len());
 
-    // --- f32 baseline ---
-    eprintln!("\n=== Phase 1: f32 LeNet-5 ===");
-    let mut net = LeNetF32::new(42);
-    let ws = net.weight_stats();
-    eprintln!("  weights: {} ({} bytes, {:.1} KB)", ws.count, ws.bytes, ws.bytes as f64 / 1024.0);
-
     // CSV header
     println!("version,epoch,test_acc,per_class,train_acc,epoch_s,weight_count,weight_kb,rss_mb,w_mean,w_std");
 
-    let lr = 0.01f32;
     let epochs = 10;
 
-    for epoch in 1..=epochs {
-        let t0 = Instant::now();
-        let mut correct = 0u32;
-        let mut total = 0u32;
+    // f32 baseline skipped — results already recorded in experiments/lenet_f32.csv
+    // f32 epoch 10: 98.8% test accuracy, 44426 weights, 173.5 KB, 32s/epoch
 
-        for i in 0..train.len() {
-            let img = &train.images[i];
-            let label = img.label as usize;
-            let (_, c) = net.train_one(&img.pixels, label, lr);
-            if c { correct += 1; }
-            total += 1;
-
-            // Progress every 10k
-            if (i + 1) % 10000 == 0 {
-                eprintln!("    {}/{} ({:.1}%)", i + 1, train.len(),
-                    correct as f64 / total as f64 * 100.0);
-            }
-        }
-
-        let epoch_s = t0.elapsed().as_secs_f64();
-        let train_acc = correct as f64 / total as f64;
-
-        // Eval
-        let (test_acc, pca) = evaluate(&net, &test, 10000);
-        let ws = net.weight_stats();
-        let rss = peak_rss_mb();
-
-        let pca_str = pca.iter().map(|a| format!("{:.3}", a)).collect::<Vec<_>>().join("|");
-
-        println!("f32,{},{:.4},{},{:.4},{:.1},{},{:.1},{:.1},{:.6},{:.6}",
-            epoch, test_acc, pca_str, train_acc, epoch_s,
-            ws.count, ws.bytes as f64 / 1024.0, rss, ws.mean, ws.std);
-
-        let pca_short = pca.iter().enumerate()
-            .map(|(i, a)| format!("d{}:{:.0}%", i, a * 100.0))
-            .collect::<Vec<_>>().join(" ");
-
-        eprintln!("  Epoch {:2} | train {:.1}% | test {:.1}% | {:.0}s | {:.1}MB",
-            epoch, train_acc * 100.0, test_acc * 100.0, epoch_s, rss);
-        eprintln!("         | {}", pca_short);
-    }
-
-    eprintln!("\n=== f32 LeNet-5 complete ===");
-
-    // --- i16 signal-native ---
-    eprintln!("\n=== Phase 2: i16 LeNet-5 ===");
+    // --- P×M×K signal-native ---
+    eprintln!("\n=== Phase 2: P×M×K Signal LeNet-5 (frozen conv + basin learning) ===");
     let mut net16 = LeNetI16::new(42);
     let ws16 = net16.weight_stats();
-    eprintln!("  weights: {} ({} bytes, {:.1} KB)", ws16.count, ws16.bytes, ws16.bytes as f64 / 1024.0);
+    eprintln!("  total weights: {} ({:.1} KB)", ws16.count, ws16.bytes as f64 / 1024.0);
+    eprintln!("  plastic weights: {} (FC3 output layer)", ws16.plastic_count);
+    eprintln!("  SignalWeight size: {} bytes", std::mem::size_of::<lenet_i16::SignalWeight>());
 
     for epoch in 1..=epochs {
         let t0 = Instant::now();
@@ -159,18 +113,18 @@ fn main() {
                     correct as f64 / total as f64 * 100.0);
             }
         }
+        net16.decay();
 
         let epoch_s = t0.elapsed().as_secs_f64();
         let train_acc = correct as f64 / total as f64;
 
-        // Eval
         let (test_acc, pca) = evaluate_i16(&net16, &test, 10000);
         let ws16 = net16.weight_stats();
         let rss = peak_rss_mb();
 
         let pca_str = pca.iter().map(|a| format!("{:.3}", a)).collect::<Vec<_>>().join("|");
 
-        println!("i16,{},{:.4},{},{:.4},{:.1},{},{:.1},{:.1},{:.6},{:.6}",
+        println!("pmk,{},{:.4},{},{:.4},{:.1},{},{:.1},{:.1},{:.4},{:.4}",
             epoch, test_acc, pca_str, train_acc, epoch_s,
             ws16.count, ws16.bytes as f64 / 1024.0, rss, ws16.mean, ws16.std);
 
@@ -178,12 +132,15 @@ fn main() {
             .map(|(i, a)| format!("d{}:{:.0}%", i, a * 100.0))
             .collect::<Vec<_>>().join(" ");
 
-        eprintln!("  Epoch {:2} | train {:.1}% | test {:.1}% | {:.0}s | {:.1}MB",
-            epoch, train_acc * 100.0, test_acc * 100.0, epoch_s, rss);
+        eprintln!("  Epoch {:2} | train {:.1}% | test {:.1}% | {:.0}s | nz {}/{} | H/W/C/F {}/{}/{}/{} | s:{} t:{} | {:.1}MB",
+            epoch, train_acc * 100.0, test_acc * 100.0, epoch_s,
+            ws16.nonzero, ws16.plastic_count,
+            ws16.temp_dist[0], ws16.temp_dist[1], ws16.temp_dist[2], ws16.temp_dist[3],
+            net16.steps, net16.transitions, rss);
         eprintln!("         | {}", pca_short);
     }
 
-    eprintln!("\n=== i16 LeNet-5 complete ===");
+    eprintln!("\n=== P×M×K Signal LeNet-5 complete ===");
 
     // --- Mastery learning ---
     eprintln!("\n=== Phase 3: Mastery LeNet-5 (frozen random + mastery output) ===");

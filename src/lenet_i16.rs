@@ -1,13 +1,15 @@
-//! LeNet-5 in i16 — signal-native integer implementation.
+//! LeNet-5 with P×M×K signal weights.
 //!
-//! Same architecture as lenet_f32.rs. All arithmetic is integer.
-//! Weights are i16. Activations are i16. Multiply-accumulate in i32.
-//! Gradients computed in i32, scaled back to i16 for weight updates.
+//! Every weight is a ternary signal: polarity × magnitude × multiplier.
+//! Conv layers: frozen random projections (spatial feature extraction).
+//! FC output layer: learns via basin update rule with temperature gating.
 //!
-//! The question: can 16-bit integer precision learn spatial features
-//! with standard backpropagation?
+//! The basin model:
+//!   Polarity = direction of the arc (excitatory/inhibitory)
+//!   Magnitude = depth of the basin (response strength)
+//!   Multiplier = width of the basin (sensitivity range)
+//!   Temperature = rigidity (resistance to change)
 
-/// Simple PRNG (same as f32 version)
 struct Rng(u64);
 impl Rng {
     fn new(seed: u64) -> Self { Self(seed) }
@@ -17,474 +19,360 @@ impl Rng {
         self.0 ^= self.0 << 17;
         self.0
     }
-    fn range_i16(&mut self, lo: i16, hi: i16) -> i16 {
-        let range = (hi - lo + 1) as u64;
-        (lo as i64 + (self.next_u64() % range) as i64) as i16
+    fn next_u8(&mut self) -> u8 { (self.next_u64() & 0xFF) as u8 }
+    fn range_i8(&mut self) -> i8 {
+        let v = (self.next_u64() % 3) as i8;
+        v - 1  // -1, 0, +1
     }
 }
 
 // ---------------------------------------------------------------------------
-// Integer tensor types
+// P×M×K Signal Weight
 // ---------------------------------------------------------------------------
 
-#[derive(Clone)]
-pub struct ITensor1 { pub data: Vec<i16> }
-#[derive(Clone)]
-pub struct ITensor2 { pub data: Vec<i16>, pub rows: usize, pub cols: usize }
-#[derive(Clone)]
-pub struct ITensor3 { pub data: Vec<i16>, pub c: usize, pub h: usize, pub w: usize }
-#[derive(Clone)]
-pub struct ITensor4 { pub data: Vec<i16>, pub n: usize, pub c: usize, pub h: usize, pub w: usize }
-
-// Gradient tensors use i32 for precision during accumulation
-#[derive(Clone)]
-pub struct GTensor1 { pub data: Vec<i32> }
-#[derive(Clone)]
-pub struct GTensor2 { pub data: Vec<i32>, pub rows: usize, pub cols: usize }
-#[derive(Clone)]
-pub struct GTensor3 { pub data: Vec<i32>, pub c: usize, pub h: usize, pub w: usize }
-#[derive(Clone)]
-pub struct GTensor4 { pub data: Vec<i32>, pub n: usize, pub c: usize, pub h: usize, pub w: usize }
-
-impl ITensor1 {
-    fn zeros(len: usize) -> Self { Self { data: vec![0; len] } }
-    fn random(len: usize, rng: &mut Rng, range: i16) -> Self {
-        Self { data: (0..len).map(|_| rng.range_i16(-range, range)).collect() }
-    }
+#[derive(Clone, Copy)]
+pub struct SignalWeight {
+    pub polarity: i8,       // -1, 0, +1
+    pub magnitude: u8,      // 0-255 (depth of basin)
+    pub multiplier: u8,     // 0-255 (width of basin)
+    pub temperature: u8,    // 255=HOT (plastic), 0=COLD (frozen)
+    pub pressure: i16,      // accumulated update pressure
 }
 
-impl ITensor2 {
-    fn zeros(rows: usize, cols: usize) -> Self {
-        Self { data: vec![0; rows * cols], rows, cols }
+impl SignalWeight {
+    fn zero() -> Self {
+        Self { polarity: 0, magnitude: 0, multiplier: 0, temperature: 255, pressure: 0 }
     }
-    fn random(rows: usize, cols: usize, rng: &mut Rng, range: i16) -> Self {
-        Self { data: (0..rows * cols).map(|_| rng.range_i16(-range, range)).collect(), rows, cols }
-    }
-    fn at(&self, r: usize, c: usize) -> i16 { self.data[r * self.cols + c] }
-}
 
-impl ITensor3 {
-    fn zeros(c: usize, h: usize, w: usize) -> Self {
-        Self { data: vec![0; c * h * w], c, h, w }
-    }
-    fn at(&self, c: usize, y: usize, x: usize) -> i16 {
-        self.data[c * self.h * self.w + y * self.w + x]
-    }
-    fn at_mut(&mut self, c: usize, y: usize, x: usize) -> &mut i16 {
-        &mut self.data[c * self.h * self.w + y * self.w + x]
-    }
-}
-
-impl ITensor4 {
-    fn random(n: usize, c: usize, h: usize, w: usize, rng: &mut Rng, range: i16) -> Self {
-        Self { data: (0..n * c * h * w).map(|_| rng.range_i16(-range, range)).collect(), n, c, h, w }
-    }
-    fn at(&self, n: usize, c: usize, y: usize, x: usize) -> i16 {
-        self.data[n * self.c * self.h * self.w + c * self.h * self.w + y * self.w + x]
-    }
-}
-
-impl GTensor1 {
-    fn zeros(len: usize) -> Self { Self { data: vec![0; len] } }
-}
-impl GTensor2 {
-    fn zeros(rows: usize, cols: usize) -> Self {
-        Self { data: vec![0; rows * cols], rows, cols }
-    }
-    fn at_mut(&mut self, r: usize, c: usize) -> &mut i32 { &mut self.data[r * self.cols + c] }
-}
-impl GTensor3 {
-    fn zeros(c: usize, h: usize, w: usize) -> Self {
-        Self { data: vec![0; c * h * w], c, h, w }
-    }
-    fn at_mut(&mut self, c: usize, y: usize, x: usize) -> &mut i32 {
-        &mut self.data[c * self.h * self.w + y * self.w + x]
-    }
-}
-impl GTensor4 {
-    fn zeros(n: usize, c: usize, h: usize, w: usize) -> Self {
-        Self { data: vec![0; n * c * h * w], n, c, h, w }
-    }
-    fn at_mut(&mut self, n: usize, c: usize, y: usize, x: usize) -> &mut i32 {
-        &mut self.data[n * self.c * self.h * self.w + c * self.h * self.w + y * self.w + x]
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Fixed-point constants
-// ---------------------------------------------------------------------------
-
-/// Scale factor for conv accumulation.
-/// Conv1: 25 muls of i16×i16, max product 127×25=3175, sum up to ~80K → fits i32 fine.
-/// Shift to keep output in i16 range.
-const CONV_SHIFT: i32 = 5;  // divide by 32
-
-/// FC accumulation shift
-const FC_SHIFT: i32 = 6;    // divide by 64
-
-/// Learning rate numerator and denominator (integer fraction).
-/// Effective lr = LR_NUM / LR_DEN
-const LR_NUM: i32 = 1;
-const LR_DEN: i32 = 64;     // ~0.016
-const LR_BITS: i32 = 6;     // approximation for shift-based update paths
-
-// ---------------------------------------------------------------------------
-// Forward operations
-// ---------------------------------------------------------------------------
-
-fn conv2d_forward(input: &ITensor3, kernel: &ITensor4, bias: &ITensor1) -> ITensor3 {
-    let out_h = input.h - kernel.h + 1;
-    let out_w = input.w - kernel.w + 1;
-    let mut output = ITensor3::zeros(kernel.n, out_h, out_w);
-
-    for f in 0..kernel.n {
-        for y in 0..out_h {
-            for x in 0..out_w {
-                let mut sum: i32 = (bias.data[f] as i32) << CONV_SHIFT;
-                for c in 0..kernel.c {
-                    for ky in 0..kernel.h {
-                        for kx in 0..kernel.w {
-                            sum += input.at(c, y + ky, x + kx) as i32
-                                * kernel.at(f, c, ky, kx) as i32;
-                        }
-                    }
-                }
-                *output.at_mut(f, y, x) = (sum >> CONV_SHIFT).clamp(-32000, 32000) as i16;
+    fn random(rng: &mut Rng) -> Self {
+        let p = rng.range_i8();
+        if p == 0 {
+            Self::zero()
+        } else {
+            Self {
+                polarity: p,
+                magnitude: (rng.next_u8() % 40) + 10,  // 10-49
+                multiplier: (rng.next_u8() % 3) + 1,    // 1-3
+                temperature: 255,
+                pressure: 0,
             }
         }
     }
-    output
-}
 
-fn relu_forward(input: &ITensor3) -> ITensor3 {
-    ITensor3 {
-        data: input.data.iter().map(|&v| v.max(0)).collect(),
-        c: input.c, h: input.h, w: input.w,
+    /// Effective value: P × M × K
+    pub fn current(&self) -> i32 {
+        self.polarity as i32 * self.magnitude as i32 * self.multiplier as i32
     }
-}
 
-fn avgpool_forward(input: &ITensor3) -> ITensor3 {
-    let out_h = input.h / 2;
-    let out_w = input.w / 2;
-    let mut output = ITensor3::zeros(input.c, out_h, out_w);
+    /// Apply the basin update rule given a raw error signal.
+    ///
+    /// raw_signal: error × input (from the learning context)
+    /// Returns true if a transition occurred.
+    fn update(&mut self, raw_signal: i32, pressure_threshold: i16) -> bool {
+        // Temperature gates how much signal gets through
+        if self.temperature == 0 { return false; }
+        let temp_scale = self.temperature as i32;
 
-    for c in 0..input.c {
-        for y in 0..out_h {
-            for x in 0..out_w {
-                let sum = input.at(c, y * 2, x * 2) as i32
-                    + input.at(c, y * 2 + 1, x * 2) as i32
-                    + input.at(c, y * 2, x * 2 + 1) as i32
-                    + input.at(c, y * 2 + 1, x * 2 + 1) as i32;
-                *output.at_mut(c, y, x) = (sum / 4) as i16;
+        // Accumulate pressure (scaled by temperature)
+        let pressure_delta = ((raw_signal * temp_scale) / 256).clamp(-500, 500) as i16;
+        self.pressure = self.pressure.saturating_add(pressure_delta);
+
+        // Check if pressure crossed threshold
+        if self.pressure.abs() < pressure_threshold { return false; }
+
+        let direction = if self.pressure > 0 { 1i8 } else { -1i8 };
+        self.pressure = 0;
+
+        // Basin update: which knob to turn?
+        if self.polarity == 0 {
+            // Silent weight — initialize in the needed direction
+            self.polarity = direction;
+            self.magnitude = 5;
+            self.multiplier = 1;
+            return true;
+        }
+
+        if self.polarity == direction {
+            // Same direction as pressure — deepen the basin (strengthen)
+            if self.magnitude < 250 {
+                self.magnitude += 5;
+            } else if self.multiplier < 255 {
+                // Magnitude maxed — widen instead
+                self.multiplier = self.multiplier.saturating_add(1);
+            }
+        } else {
+            // Opposite direction — shallow the basin (weaken before flip)
+            if self.magnitude > 5 {
+                self.magnitude -= 5;
+            } else {
+                // Basin collapsed — polarity dies
+                self.magnitude = 0;
+                self.polarity = 0;
+                self.multiplier = 0;
             }
         }
-    }
-    output
-}
 
-fn fc_forward(input: &[i16], weights: &ITensor2, bias: &ITensor1) -> Vec<i16> {
-    let mut output = vec![0i16; weights.rows];
-    for i in 0..weights.rows {
-        let mut sum: i32 = (bias.data[i] as i32) << FC_SHIFT;
-        for j in 0..weights.cols {
-            sum += input[j] as i32 * weights.at(i, j) as i32;
+        // Cool slightly on each transition (evidence of participation)
+        if self.temperature > 2 {
+            self.temperature -= 2;
         }
-        output[i] = (sum >> FC_SHIFT).clamp(-32000, 32000) as i16;
+
+        true
     }
-    output
-}
 
-fn relu_vec(input: &[i16]) -> Vec<i16> {
-    input.iter().map(|&v| v.max(0)).collect()
-}
-
-/// Integer softmax approximation: find max, subtract, use lookup for exp.
-/// Returns probabilities as i16 scaled to [0, 1000].
-fn softmax_i16(input: &[i16]) -> Vec<i16> {
-    let max = *input.iter().max().unwrap_or(&0);
-    // Approximate exp with linear segments for small differences
-    let mut exps: Vec<i32> = input.iter().map(|&x| {
-        let diff = (x as i32 - max as i32).max(-500);
-        // exp approximation: max(1, 1000 + diff * 4)
-        // This is crude but preserves relative ordering
-        (1000 + diff * 4).max(1)
-    }).collect();
-    let sum: i32 = exps.iter().sum();
-    exps.iter().map(|&e| ((e * 1000) / sum).clamp(0, 1000) as i16).collect()
+    /// Decay pressure toward zero. Call between cycles.
+    fn coast(&mut self) {
+        if self.pressure > 0 { self.pressure -= 1; }
+        else if self.pressure < 0 { self.pressure += 1; }
+    }
 }
 
 // ---------------------------------------------------------------------------
-// Backward operations
+// Signal matrix (frozen or plastic)
 // ---------------------------------------------------------------------------
 
-fn conv2d_backward(
-    input: &ITensor3, kernel: &ITensor4, d_output: &GTensor3,
-) -> (GTensor4, GTensor1, GTensor3) {
-    let out_h = d_output.h;
-    let out_w = d_output.w;
-    let mut d_kernel = GTensor4::zeros(kernel.n, kernel.c, kernel.h, kernel.w);
-    let mut d_bias = GTensor1::zeros(kernel.n);
-    let mut d_input = GTensor3::zeros(input.c, input.h, input.w);
+#[derive(Clone)]
+pub struct SignalMatrix {
+    pub data: Vec<SignalWeight>,
+    pub rows: usize,
+    pub cols: usize,
+}
 
-    for f in 0..kernel.n {
-        for y in 0..out_h {
-            for x in 0..out_w {
-                let d_out = d_output.data[f * out_h * out_w + y * out_w + x];
-                d_bias.data[f] += d_out;
-                for c in 0..kernel.c {
-                    for ky in 0..kernel.h {
-                        for kx in 0..kernel.w {
-                            *d_kernel.at_mut(f, c, ky, kx) += d_out * input.at(c, y + ky, x + kx) as i32;
-                            *d_input.at_mut(c, y + ky, x + kx) += d_out * kernel.at(f, c, ky, kx) as i32;
+impl SignalMatrix {
+    fn zeros(rows: usize, cols: usize) -> Self {
+        Self { data: vec![SignalWeight::zero(); rows * cols], rows, cols }
+    }
+
+    fn random(rows: usize, cols: usize, rng: &mut Rng) -> Self {
+        Self { data: (0..rows * cols).map(|_| SignalWeight::random(rng)).collect(), rows, cols }
+    }
+
+    /// Forward: dot product using current() values.
+    /// Accumulate in i64, scale to i16 range.
+    fn forward(&self, input: &[i16]) -> Vec<i16> {
+        let mut output = vec![0i16; self.rows];
+        for i in 0..self.rows {
+            let mut sum: i64 = 0;
+            for j in 0..self.cols {
+                sum += input[j] as i64 * self.data[i * self.cols + j].current() as i64;
+            }
+            // Scale by column count to keep in i16 range
+            output[i] = (sum / (self.cols as i64).max(1)).clamp(-32000, 32000) as i16;
+        }
+        output
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Signal conv kernel (frozen)
+// ---------------------------------------------------------------------------
+
+#[derive(Clone)]
+struct SignalConv {
+    data: Vec<SignalWeight>,
+    n: usize, c: usize, h: usize, w: usize,
+    bias: Vec<i16>,
+}
+
+impl SignalConv {
+    fn random(n: usize, c: usize, h: usize, w: usize, rng: &mut Rng) -> Self {
+        let data: Vec<SignalWeight> = (0..n * c * h * w).map(|_| SignalWeight::random(rng)).collect();
+        let bias: Vec<i16> = (0..n).map(|_| rng.range_i8() as i16 * 2).collect();
+        Self { data, n, c, h, w, bias }
+    }
+
+    fn at(&self, n: usize, c: usize, y: usize, x: usize) -> i32 {
+        self.data[n * self.c * self.h * self.w + c * self.h * self.w + y * self.w + x].current()
+    }
+
+    fn forward(&self, input: &[i16], ic: usize, ih: usize, iw: usize) -> (Vec<i16>, usize, usize, usize) {
+        let oh = ih - self.h + 1;
+        let ow = iw - self.w + 1;
+        let mut output = vec![0i16; self.n * oh * ow];
+        let fan_in = (self.c * self.h * self.w) as i64;
+
+        for f in 0..self.n {
+            for y in 0..oh {
+                for x in 0..ow {
+                    let mut sum: i64 = self.bias[f] as i64 * fan_in;
+                    for c in 0..self.c {
+                        for ky in 0..self.h {
+                            for kx in 0..self.w {
+                                let in_idx = c * ih * iw + (y + ky) * iw + (x + kx);
+                                sum += input[in_idx] as i64 * self.at(f, c, ky, kx) as i64;
+                            }
                         }
                     }
+                    output[f * oh * ow + y * ow + x] =
+                        (sum / fan_in).clamp(-32000, 32000) as i16;
                 }
             }
         }
-    }
-    (d_kernel, d_bias, d_input)
-}
-
-fn relu_backward_3d(input: &ITensor3, d_output: &GTensor3) -> GTensor3 {
-    GTensor3 {
-        data: input.data.iter().zip(d_output.data.iter())
-            .map(|(&inp, &d)| if inp > 0 { d } else { 0 }).collect(),
-        c: input.c, h: input.h, w: input.w,
+        (output, self.n, oh, ow)
     }
 }
 
-fn avgpool_backward(d_output: &GTensor3, in_h: usize, in_w: usize) -> GTensor3 {
-    let mut d_input = GTensor3::zeros(d_output.c, in_h, in_w);
-    for c in 0..d_output.c {
-        for y in 0..d_output.h {
-            for x in 0..d_output.w {
-                let d = d_output.data[c * d_output.h * d_output.w + y * d_output.w + x] / 4;
-                *d_input.at_mut(c, y * 2, x * 2) = d;
-                *d_input.at_mut(c, y * 2 + 1, x * 2) = d;
-                *d_input.at_mut(c, y * 2, x * 2 + 1) = d;
-                *d_input.at_mut(c, y * 2 + 1, x * 2 + 1) = d;
+// ---------------------------------------------------------------------------
+// Helper ops
+// ---------------------------------------------------------------------------
+
+fn relu_vec(v: &[i16]) -> Vec<i16> { v.iter().map(|&x| x.max(0)).collect() }
+
+fn avgpool(input: &[i16], c: usize, h: usize, w: usize) -> (Vec<i16>, usize, usize, usize) {
+    let oh = h / 2;
+    let ow = w / 2;
+    let mut out = vec![0i16; c * oh * ow];
+    for ch in 0..c {
+        for y in 0..oh {
+            for x in 0..ow {
+                let base = ch * h * w;
+                let s = input[base + y*2*w + x*2] as i32
+                    + input[base + (y*2+1)*w + x*2] as i32
+                    + input[base + y*2*w + x*2+1] as i32
+                    + input[base + (y*2+1)*w + x*2+1] as i32;
+                out[ch * oh * ow + y * ow + x] = (s / 4) as i16;
             }
         }
     }
-    d_input
-}
-
-fn fc_backward(input: &[i16], weights: &ITensor2, d_output: &[i32]) -> (GTensor2, GTensor1, Vec<i32>) {
-    let mut d_weights = GTensor2::zeros(weights.rows, weights.cols);
-    let mut d_bias = GTensor1::zeros(weights.rows);
-    let mut d_input = vec![0i32; weights.cols];
-
-    for i in 0..weights.rows {
-        d_bias.data[i] = d_output[i];
-        for j in 0..weights.cols {
-            *d_weights.at_mut(i, j) = d_output[i] * input[j] as i32;
-            d_input[j] += d_output[i] * weights.at(i, j) as i32;
-        }
-    }
-    (d_weights, d_bias, d_input)
-}
-
-fn relu_vec_backward(input: &[i16], d_output: &[i32]) -> Vec<i32> {
-    input.iter().zip(d_output.iter())
-        .map(|(&inp, &d)| if inp > 0 { d } else { 0 }).collect()
-}
-
-/// Cross-entropy gradient in integer: output - target (scaled)
-fn cross_entropy_gradient_i16(softmax_out: &[i16], label: usize) -> Vec<i32> {
-    // softmax_out is [0, 1000]. Target is 1000 for correct, 0 for others.
-    // Gradient = softmax - target, scaled to reasonable range
-    softmax_out.iter().enumerate().map(|(i, &s)| {
-        let target = if i == label { 1000i32 } else { 0 };
-        (s as i32 - target) // range: [-1000, 1000]
-    }).collect()
+    (out, c, oh, ow)
 }
 
 // ---------------------------------------------------------------------------
-// SGD update: gradient in i32, weights in i16
-// ---------------------------------------------------------------------------
-
-fn sgd_update_conv(weights: &mut ITensor4, grads: &GTensor4, bias: &mut ITensor1, d_bias: &GTensor1) {
-    for (w, g) in weights.data.iter_mut().zip(grads.data.iter()) {
-        // Shift gradient right for learning rate + accumulation scale
-        let update = *g >> (LR_BITS + CONV_SHIFT);
-        *w = (*w as i32 - update).clamp(-500, 500) as i16;
-    }
-    for (b, g) in bias.data.iter_mut().zip(d_bias.data.iter()) {
-        let update = *g >> (LR_BITS + CONV_SHIFT);
-        *b = (*b as i32 - update).clamp(-500, 500) as i16;
-    }
-}
-
-fn sgd_update_fc(weights: &mut ITensor2, grads: &GTensor2, bias: &mut ITensor1, d_bias: &GTensor1) {
-    for (w, g) in weights.data.iter_mut().zip(grads.data.iter()) {
-        let update = *g >> (LR_BITS + FC_SHIFT + 2); // extra shift for larger fan-in
-        *w = (*w as i32 - update).clamp(-500, 500) as i16;
-    }
-    for (b, g) in bias.data.iter_mut().zip(d_bias.data.iter()) {
-        let update = *g >> (LR_BITS + FC_SHIFT);
-        *b = (*b as i32 - update).clamp(-500, 500) as i16;
-    }
-}
-
-// ---------------------------------------------------------------------------
-// LeNet-5 i16
+// LeNet-5 with P×M×K signal weights
 // ---------------------------------------------------------------------------
 
 pub struct LeNetI16 {
-    conv1_k: ITensor4,
-    conv1_b: ITensor1,
-    conv2_k: ITensor4,
-    conv2_b: ITensor1,
-    fc1_w: ITensor2,
-    fc1_b: ITensor1,
-    fc2_w: ITensor2,
-    fc2_b: ITensor1,
-    fc3_w: ITensor2,
-    fc3_b: ITensor1,
-}
-
-struct IForwardCache {
-    input: ITensor3,
-    conv1_out: ITensor3,
-    relu1_out: ITensor3,
-    pool1_out: ITensor3,
-    conv2_out: ITensor3,
-    relu2_out: ITensor3,
-    pool2_out: ITensor3,
-    fc1_in: Vec<i16>,
-    fc1_out: Vec<i16>,
-    relu3_out: Vec<i16>,
-    fc2_out: Vec<i16>,
-    relu4_out: Vec<i16>,
-    softmax_out: Vec<i16>,
+    // Frozen random layers
+    conv1: SignalConv,
+    conv2: SignalConv,
+    fc1: SignalMatrix,
+    fc2: SignalMatrix,
+    // Plastic output layer
+    fc3: SignalMatrix,
+    pub steps: u64,
+    pub transitions: u64,
 }
 
 impl LeNetI16 {
     pub fn new(seed: u64) -> Self {
         let mut rng = Rng::new(seed);
-        // Small integer init: range proportional to 1/sqrt(fan_in)
-        // Conv1: fan_in=25, sqrt=5, range=127/5=25
-        // Conv2: fan_in=150, sqrt=12, range=127/12=10
-        // FC: range scales down with fan_in
         Self {
-            conv1_k: ITensor4::random(6, 1, 5, 5, &mut rng, 25),
-            conv1_b: ITensor1::zeros(6),
-            conv2_k: ITensor4::random(16, 6, 5, 5, &mut rng, 10),
-            conv2_b: ITensor1::zeros(16),
-            fc1_w: ITensor2::random(120, 256, &mut rng, 5),
-            fc1_b: ITensor1::zeros(120),
-            fc2_w: ITensor2::random(84, 120, &mut rng, 8),
-            fc2_b: ITensor1::zeros(84),
-            fc3_w: ITensor2::random(10, 84, &mut rng, 10),
-            fc3_b: ITensor1::zeros(10),
+            conv1: SignalConv::random(6, 1, 5, 5, &mut rng),
+            conv2: SignalConv::random(16, 6, 5, 5, &mut rng),
+            fc1: SignalMatrix::random(120, 256, &mut rng),
+            fc2: SignalMatrix::random(84, 120, &mut rng),
+            fc3: SignalMatrix::zeros(10, 84),  // starts empty, learns from scratch
+            steps: 0,
+            transitions: 0,
         }
     }
 
-    fn forward_cached(&self, image: &[u8]) -> (usize, IForwardCache) {
-        // Input: pixel values scaled to [0, 127] (half i16 range)
-        let mut input = ITensor3::zeros(1, 28, 28);
-        for y in 0..28 {
-            for x in 0..28 {
-                *input.at_mut(0, y, x) = (image[y * 28 + x] as i16) / 2;
-            }
-        }
+    /// Forward through frozen layers → 84-dim features.
+    fn features(&self, image: &[u8]) -> Vec<i16> {
+        // Input: pixels to [0, 127]
+        let input: Vec<i16> = image.iter().map(|&p| (p as i16) / 2).collect();
 
-        let conv1_out = conv2d_forward(&input, &self.conv1_k, &self.conv1_b);
-        let relu1_out = relu_forward(&conv1_out);
-        let pool1_out = avgpool_forward(&relu1_out);
-
-        let conv2_out = conv2d_forward(&pool1_out, &self.conv2_k, &self.conv2_b);
-        let relu2_out = relu_forward(&conv2_out);
-        let pool2_out = avgpool_forward(&relu2_out);
-
-        let fc1_in = pool2_out.data.clone();
-        let fc1_out = fc_forward(&fc1_in, &self.fc1_w, &self.fc1_b);
-        let relu3_out = relu_vec(&fc1_out);
-        let fc2_out = fc_forward(&relu3_out, &self.fc2_w, &self.fc2_b);
-        let relu4_out = relu_vec(&fc2_out);
-        let fc3_out = fc_forward(&relu4_out, &self.fc3_w, &self.fc3_b);
-        let softmax_out = softmax_i16(&fc3_out);
-
-        let prediction = softmax_out.iter().enumerate()
-            .max_by_key(|(_, s)| *s)
-            .map(|(i, _)| i).unwrap_or(0);
-
-        let cache = IForwardCache {
-            input, conv1_out, relu1_out, pool1_out,
-            conv2_out, relu2_out, pool2_out,
-            fc1_in, fc1_out, relu3_out, fc2_out, relu4_out,
-            softmax_out,
-        };
-
-        (prediction, cache)
+        let (x, c, h, w) = self.conv1.forward(&input, 1, 28, 28);
+        let x = relu_vec(&x);
+        let (x, c, h, w) = avgpool(&x, c, h, w);
+        let (x, c, h, w) = self.conv2.forward(&x, c, h, w);
+        let x = relu_vec(&x);
+        let (x, _c, _h, _w) = avgpool(&x, c, h, w);
+        let x = relu_vec(&self.fc1.forward(&x));
+        relu_vec(&self.fc2.forward(&x))
     }
 
     pub fn predict(&self, image: &[u8]) -> usize {
-        self.forward_cached(image).0
+        let feats = self.features(image);
+        let output = self.fc3.forward(&feats);
+        output.iter().enumerate()
+            .max_by_key(|(_, &s)| s)
+            .map(|(i, _)| i).unwrap_or(0)
     }
 
     pub fn train_one(&mut self, image: &[u8], label: usize) -> (usize, bool) {
-        let (prediction, cache) = self.forward_cached(image);
+        let feats = self.features(image);
+        let output = self.fc3.forward(&feats);
+        let predicted = output.iter().enumerate()
+            .max_by_key(|(_, &s)| s)
+            .map(|(i, _)| i).unwrap_or(0);
 
-        // Loss gradient
-        let d_fc3_out = cross_entropy_gradient_i16(&cache.softmax_out, label);
+        self.steps += 1;
 
-        // FC3 backward
-        let (d_fc3_w, d_fc3_b, d_relu4) = fc_backward(&cache.relu4_out, &self.fc3_w, &d_fc3_out);
-        let d_fc2_out = relu_vec_backward(&cache.fc2_out, &d_relu4);
+        // Participation threshold: top 25% of feature activity
+        let max_feat = feats.iter().map(|x| x.unsigned_abs() as u32).max().unwrap_or(1).max(1);
+        let threshold = (max_feat / 4) as u16;
 
-        // FC2 backward
-        let (d_fc2_w, d_fc2_b, d_relu3) = fc_backward(&cache.relu3_out, &self.fc2_w, &d_fc2_out);
-        let d_fc1_out = relu_vec_backward(&cache.fc1_out, &d_relu3);
+        // Update only the correct class row and (if wrong) the predicted class row
+        let rows_to_update: Vec<(usize, i32)> = if predicted == label {
+            vec![(label, 1)]
+        } else {
+            vec![(label, 1), (predicted, -1)]
+        };
 
-        // FC1 backward
-        let (d_fc1_w, d_fc1_b, d_flat) = fc_backward(&cache.fc1_in, &self.fc1_w, &d_fc1_out);
+        let pressure_threshold: i16 = 6;
 
-        // Unflatten
-        let d_pool2 = GTensor3 { data: d_flat, c: cache.pool2_out.c, h: cache.pool2_out.h, w: cache.pool2_out.w };
+        for &(row, direction) in &rows_to_update {
+            for j in 0..self.fc3.cols {
+                let feat_abs = feats[j].unsigned_abs() as u16;
+                if feat_abs <= threshold { continue; }
 
-        let d_relu2 = avgpool_backward(&d_pool2, cache.relu2_out.h, cache.relu2_out.w);
-        let d_conv2_out = relu_backward_3d(&cache.conv2_out, &d_relu2);
-        let (d_conv2_k, d_conv2_b, d_pool1) = conv2d_backward(&cache.pool1_out, &self.conv2_k, &d_conv2_out);
+                // Raw signal: direction × feature value
+                let raw = direction * feats[j] as i32;
 
-        let d_relu1 = avgpool_backward(&d_pool1, cache.relu1_out.h, cache.relu1_out.w);
-        let d_conv1_out = relu_backward_3d(&cache.conv1_out, &d_relu1);
-        let (d_conv1_k, d_conv1_b, _) = conv2d_backward(&cache.input, &self.conv1_k, &d_conv1_out);
+                let w = &mut self.fc3.data[row * self.fc3.cols + j];
+                if w.update(raw, pressure_threshold) {
+                    self.transitions += 1;
+                }
+            }
+        }
 
-        // SGD update
-        sgd_update_conv(&mut self.conv1_k, &d_conv1_k, &mut self.conv1_b, &d_conv1_b);
-        sgd_update_conv(&mut self.conv2_k, &d_conv2_k, &mut self.conv2_b, &d_conv2_b);
-        sgd_update_fc(&mut self.fc1_w, &d_fc1_w, &mut self.fc1_b, &d_fc1_b);
-        sgd_update_fc(&mut self.fc2_w, &d_fc2_w, &mut self.fc2_b, &d_fc2_b);
-        sgd_update_fc(&mut self.fc3_w, &d_fc3_w, &mut self.fc3_b, &d_fc3_b);
+        (predicted, predicted == label)
+    }
 
-        (prediction, prediction == label)
+    pub fn decay(&mut self) {
+        for w in &mut self.fc3.data {
+            w.coast();
+        }
     }
 
     pub fn weight_stats(&self) -> I16WeightStats {
-        let all: Vec<i16> = [
-            &self.conv1_k.data[..], &self.conv1_b.data[..],
-            &self.conv2_k.data[..], &self.conv2_b.data[..],
-            &self.fc1_w.data[..], &self.fc1_b.data[..],
-            &self.fc2_w.data[..], &self.fc2_b.data[..],
-            &self.fc3_w.data[..], &self.fc3_b.data[..],
-        ].iter().flat_map(|s| s.iter().copied()).collect();
+        let plastic = &self.fc3.data;
+        let n = plastic.len() as f64;
+        let mean = plastic.iter().map(|w| w.current().abs() as f64).sum::<f64>() / n;
+        let std = (plastic.iter().map(|w| {
+            let d = w.current().abs() as f64 - mean; d * d
+        }).sum::<f64>() / n).sqrt();
 
-        let n = all.len() as f64;
-        let mean = all.iter().map(|&x| x as f64).sum::<f64>() / n;
-        let std = (all.iter().map(|x| { let d = *x as f64 - mean; d * d }).sum::<f64>() / n).sqrt();
+        let total_frozen = self.conv1.data.len() + self.conv2.data.len()
+            + self.fc1.data.len() + self.fc2.data.len();
+
+        let mut temp_dist = [0u32; 4];
+        for w in plastic {
+            if w.temperature >= 192 { temp_dist[0] += 1; }
+            else if w.temperature >= 128 { temp_dist[1] += 1; }
+            else if w.temperature >= 64 { temp_dist[2] += 1; }
+            else { temp_dist[3] += 1; }
+        }
+
+        let nonzero = plastic.iter().filter(|w| w.magnitude > 0).count();
 
         I16WeightStats {
-            count: all.len(),
-            bytes: all.len() * 2,
-            mean, std,
+            count: total_frozen + plastic.len(),
+            plastic_count: plastic.len(),
+            bytes: (total_frozen + plastic.len()) * std::mem::size_of::<SignalWeight>(),
+            mean, std, nonzero,
+            temp_dist,
         }
     }
 }
 
 pub struct I16WeightStats {
     pub count: usize,
+    pub plastic_count: usize,
     pub bytes: usize,
     pub mean: f64,
     pub std: f64,
+    pub nonzero: usize,
+    pub temp_dist: [u32; 4],
 }
