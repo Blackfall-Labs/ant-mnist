@@ -9,6 +9,7 @@ mod mnist;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::Instant;
 
 use serde::{Serialize, Deserialize};
 use tiny_http::{Server, Response, Header, Method};
@@ -556,6 +557,7 @@ fn handle_cmd(
         }
 
         "train_cycle" => {
+            let t0 = Instant::now();
             let per_digit = cmd.count.unwrap_or(50);
 
             // Build balanced set
@@ -616,9 +618,9 @@ fn handle_cmd(
                 let mut s = state.lock().unwrap();
                 s.cycle += 1;
             }
-            log_msg(state, format!("Trained: {}/{} ({:.1}%) on {} samples ({}/digit)",
+            log_msg(state, format!("Trained: {}/{} ({:.1}%) {}/digit ({:.1}s)",
                 correct, train_set.len(), correct as f64 / train_set.len() as f64 * 100.0,
-                train_set.len(), per_digit));
+                per_digit, t0.elapsed().as_secs_f64()));
 
             // Auto-eval
             let eval_cmd = Cmd { action: "evaluate".into(), digit: None, count: Some(500) };
@@ -743,7 +745,7 @@ fn handle_cmd(
         }
 
         "train_isolation" => {
-            // Phase 1: Each detector trains ONLY on its own digit
+            let t0 = Instant::now();
             let per_digit = cmd.count.unwrap_or(200);
             let mut by_digit: Vec<Vec<usize>> = vec![Vec::new(); 10];
             for (i, img) in train.images.iter().enumerate() {
@@ -760,11 +762,11 @@ fn handle_cmd(
             }
 
             { state.lock().unwrap().cycle += 1; }
-            log_msg(state, format!("Isolation: each detector trained on {} own-digit samples", per_digit));
+            log_msg(state, format!("Isolation: {} samples/det ({:.1}s)", per_digit, t0.elapsed().as_secs_f64()));
         }
 
         "train_adversarial" => {
-            // Phase 2: Each detector trains on what ISN'T theirs
+            let t0 = Instant::now();
             let per_digit = cmd.count.unwrap_or(50);
             let mut by_digit: Vec<Vec<usize>> = vec![Vec::new(); 10];
             for (i, img) in train.images.iter().enumerate() {
@@ -784,11 +786,11 @@ fn handle_cmd(
             }
 
             { state.lock().unwrap().cycle += 1; }
-            log_msg(state, format!("Adversarial: each detector hardened on {} non-digit samples per class", per_digit));
+            log_msg(state, format!("Adversarial: {}×9 samples/det ({:.1}s)", per_digit, t0.elapsed().as_secs_f64()));
         }
 
         "train_finalizer_only" => {
-            // Phase 3: Detectors frozen, only finalizer trains
+            let t0 = Instant::now();
             let per_digit = cmd.count.unwrap_or(200);
             let mut by_digit: Vec<Vec<usize>> = vec![Vec::new(); 10];
             for (i, img) in train.images.iter().enumerate() {
@@ -813,8 +815,9 @@ fn handle_cmd(
             finalizer.decay();
 
             { state.lock().unwrap().cycle += 1; }
-            log_msg(state, format!("Finalizer: {}/{} ({:.1}%)",
-                correct, train_set.len(), correct as f64 / train_set.len() as f64 * 100.0));
+            log_msg(state, format!("Finalizer: {}/{} ({:.1}%) ({:.1}s)",
+                correct, train_set.len(), correct as f64 / train_set.len() as f64 * 100.0,
+                t0.elapsed().as_secs_f64()));
 
             let eval_cmd = Cmd { action: "evaluate".into(), digit: None, count: Some(1000) };
             handle_cmd(&eval_cmd, detectors, finalizer, train, test, state);
