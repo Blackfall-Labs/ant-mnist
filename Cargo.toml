@@ -31,3 +31,7 @@ path = "src/flow_experiment.rs"
 [[bin]]
 name = "lenet-experiment"
 path = "src/lenet_experiment.rs"
+
+[[bin]]
+name = "lenet-sweep"
+path = "src/lenet_sweep.rs"

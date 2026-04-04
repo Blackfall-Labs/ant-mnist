@@ -1,0 +1,161 @@
+warning: use of deprecated associated function `Signal::from_i16`: defaults multiplier to 1 — use Signal::from_signed_i32(val) for large ranges or construct with explicit multiplier
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:437:15
+    |
+437 |         Self::from_i16(delta)
+    |               ^^^^^^^^
+    |
+    = note: `#[warn(deprecated)]` on by default
+
+warning: use of deprecated associated function `Signal::positive`: use Signal::positive_amplified(mag, mul) — s = p × m × k requires all three values
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:452:19
+    |
+452 |             Self::positive(magnitude)
+    |                   ^^^^^^^^
+
+warning: use of deprecated associated function `Signal::from_spike_rate`: defaults multiplier to 1 — construct Signal with explicit multiplier instead
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:464:15
+    |
+464 |         Self::from_spike_rate(rate_hz, max_rate_hz)
+    |               ^^^^^^^^^^^^^^^
+
+warning: use of deprecated associated function `Signal::from_signed_i32`: defaults multiplier to 1 — use Signal::from_current(val) for full p × m × k range
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:583:15
+    |
+583 |         Self::from_signed_i32(a + b)
+    |               ^^^^^^^^^^^^^^^
+
+warning: use of deprecated associated function `Signal::from_signed_i32`: defaults multiplier to 1 — use Signal::from_current(val) for full p × m × k range
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:632:36
+    |
+632 |             let mut result = Self::from_signed_i32((current + delta as i16) as i32);
+    |                                    ^^^^^^^^^^^^^^^
+
+warning: use of deprecated associated function `Signal::from_signed_i32`: defaults multiplier to 1 — use Signal::from_current(val) for full p × m × k range
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:636:36
+    |
+636 |             let mut result = Self::from_signed_i32((current - delta as i16) as i32);
+    |                                    ^^^^^^^^^^^^^^^
+
+warning: `ternary-signal` (lib) generated 6 warnings
+warning: field `vector_width` is never read
+  --> E:\repos\blackfall-labs\atomic-neural-transistors\src\memory.rs:47:5
+   |
+38 | pub struct MemoryANT {
+   |            --------- field in this struct
+...
+47 |     vector_width: u16,
+   |     ^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: method `resolve_path` is never used
+  --> E:\repos\blackfall-labs\atomic-neural-transistors\src\modules\ant_ml.rs:97:8
+   |
+80 | impl AntRuntime {
+   | --------------- method in this implementation
+...
+97 |     fn resolve_path(&self, path: &str) -> PathBuf {
+   |        ^^^^^^^^^^^^
+
+warning: `atomic-neural-transistors` (lib) generated 2 warnings
+   Compiling ant-mnist v0.1.0 (E:\repos\blackfall-labs\ant-mnist)
+warning: unused variable: `raw_output`
+   --> src\lenet_mastery.rs:322:9
+    |
+322 |         raw_output: &[i16],   // 84-dim (pre-relu hidden output)
+    |         ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_raw_output`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `predicted`
+   --> src\lenet_sweep.rs:171:22
+    |
+171 |                 let (predicted, c) = net.train_one(&img.pixels, label);
+    |                      ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_predicted`
+
+warning: type `Rng` is more private than the item `MasteryLayer::random_init`
+   --> src\lenet_mastery.rs:181:5
+    |
+181 |     pub fn random_init(rows: usize, cols: usize, rng: &mut Rng) -> Self {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ associated function `MasteryLayer::random_init` is reachable at visibility `pub(crate)`
+    |
+note: but type `Rng` is only usable at visibility `pub(self)`
+   --> src\lenet_mastery.rs:10:1
+    |
+ 10 | struct Rng(u64);
+    | ^^^^^^^^^^
+    = note: `#[warn(private_interfaces)]` on by default
+
+warning: associated function `print_image` is never used
+  --> src\mnist.rs:65:12
+   |
+18 | impl MnistDataset {
+   | ----------------- associated function in this implementation
+...
+65 |     pub fn print_image(image: &MnistImage) {
+   |            ^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: associated function `zeros` is never used
+  --> src\lenet_mastery.rs:41:8
+   |
+40 | impl T1 {
+   | ------- associated function in this implementation
+41 |     fn zeros(len: usize) -> Self { Self { data: vec![0; len] } }
+   |        ^^^^^
+
+warning: methods `apply_transition`, `nonzero_count`, and `weight_stats` are never used
+   --> src\lenet_mastery.rs:291:8
+    |
+168 | impl MasteryLayer {
+    | ----------------- methods in this implementation
+...
+291 |     fn apply_transition(&mut self, idx: usize, needed: i8) {
+    |        ^^^^^^^^^^^^^^^^
+...
+387 |     pub fn nonzero_count(&self) -> usize {
+    |            ^^^^^^^^^^^^^
+...
+391 |     pub fn weight_stats(&self) -> (f64, f64) {
+    |            ^^^^^^^^^^^^
+
+warning: associated function `new_seeded` is never used
+   --> src\lenet_mastery.rs:432:12
+    |
+416 | impl LeNetMastery {
+    | ----------------- associated function in this implementation
+...
+432 |     pub fn new_seeded(seed: u64) -> Self {
+    |            ^^^^^^^^^^
+
+warning: `ant-mnist` (bin "lenet-sweep") generated 7 warnings (run `cargo fix --bin "lenet-sweep" -p ant-mnist` to apply 2 suggestions)
+    Finished `release` profile [optimized] target(s) in 1.03s
+     Running `target\release\lenet-sweep.exe data`
+Loading MNIST...
+  train=60000, test=10000
+
+=== baseline ===
+  total: 44426 | plastic: 11014
+  E 1 | train 25.1% | test 15.0% | 16s | d0:0% d1:0% d2:8% d3:7% d4:0% d5:8% d6:23% d7:10% d8:9% d9:86%
+  E 2 | train 23.2% | test 13.4% | 16s | d0:0% d1:0% d2:1% d3:8% d4:1% d5:5% d6:22% d7:5% d8:0% d9:94%
+  E 3 | train 23.3% | test 13.0% | 16s | d0:0% d1:0% d2:0% d3:12% d4:2% d5:0% d6:5% d7:10% d8:2% d9:97%
+  E 4 | train 22.7% | test 14.8% | 16s | d0:0% d1:0% d2:0% d3:6% d4:1% d5:5% d6:16% d7:14% d8:19% d9:89%
+  E 5 | train 22.6% | test 19.9% | 16s | d0:0% d1:0% d2:0% d3:7% d4:1% d5:39% d6:44% d7:29% d8:6% d9:77%
+  E 6 | train 22.7% | test 13.1% | 16s | d0:0% d1:0% d2:0% d3:5% d4:2% d5:6% d6:10% d7:7% d8:5% d9:96%
+  E 7 | train 22.5% | test 16.1% | 16s | d0:0% d1:0% d2:1% d3:6% d4:1% d5:12% d6:33% d7:21% d8:2% d9:87%
+  E 8 | train 23.1% | test 19.0% | 16s | d0:0% d1:0% d2:1% d3:9% d4:3% d5:32% d6:28% d7:22% d8:13% d9:86%
+  E 9 | train 23.0% | test 13.6% | 16s | d0:0% d1:0% d2:0% d3:6% d4:2% d5:7% d6:9% d7:9% d8:7% d9:95%
+  E10 | train 22.8% | test 11.9% | 16s | d0:0% d1:0% d2:0% d3:3% d4:1% d5:3% d6:5% d7:9% d8:75% d9:25%
+=== baseline complete ===
+
+
+=== ensemble (3 voters) ===
+  E 1 | test 18.2% | 48s
+  E 2 | test 16.6% | 49s
+  E 3 | test 12.8% | 48s
+  E 4 | test 15.6% | 48s
+  E 5 | test 17.0% | 49s
+  E 6 | test 15.9% | 48s
+  E 7 | test 17.9% | 48s
+error: process didn't exit successfully: `target\release\lenet-sweep.exe data` (exit code: 1)

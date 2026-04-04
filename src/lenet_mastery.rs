@@ -166,7 +166,7 @@ pub struct MasteryLayer {
 }
 
 impl MasteryLayer {
-    fn new(rows: usize, cols: usize) -> Self {
+    pub fn new(rows: usize, cols: usize) -> Self {
         Self {
             weights: (0..rows * cols).map(|_| MasteryWeight::zero()).collect(),
             bias: vec![0i16; rows],
@@ -178,7 +178,15 @@ impl MasteryLayer {
         }
     }
 
-    fn random_init(rows: usize, cols: usize, rng: &mut Rng) -> Self {
+    /// Frozen random: initialized with random weights, pressure_threshold set
+    /// impossibly high so no learning occurs. Forward pass works normally.
+    pub fn frozen_random(rows: usize, cols: usize, rng: &mut Rng) -> Self {
+        let mut layer = Self::random_init(rows, cols, rng);
+        layer.pressure_threshold = i16::MAX; // never transitions
+        layer
+    }
+
+    pub fn random_init(rows: usize, cols: usize, rng: &mut Rng) -> Self {
         let weights = (0..rows * cols).map(|_| {
             let p = rng.range_i8();
             if p == 0 {
@@ -203,7 +211,7 @@ impl MasteryLayer {
     }
 
     /// Forward: dot product using current() values.
-    fn forward(&self, input: &[i16]) -> Vec<i16> {
+    pub fn forward(&self, input: &[i16]) -> Vec<i16> {
         let mut output = vec![0i16; self.rows];
         for i in 0..self.rows {
             let mut sum: i32 = self.bias[i] as i32 * 64;
@@ -221,7 +229,7 @@ impl MasteryLayer {
     /// Participation-gated: only active inputs contribute.
     /// Pressure accumulates over samples. Transitions happen when pressure
     /// crosses threshold.
-    fn learn(&mut self, input: &[i16], output: &[i16], label: usize) {
+    pub fn learn(&mut self, input: &[i16], output: &[i16], label: usize) {
         self.steps += 1;
 
         let predicted = output.iter().enumerate()
@@ -377,7 +385,7 @@ impl MasteryLayer {
     }
 
     /// Decay pressure toward zero. Call between cycles.
-    fn decay(&mut self) {
+    pub fn decay(&mut self) {
         for w in &mut self.weights {
             if w.pressure > 0 { w.pressure -= 1; }
             else if w.pressure < 0 { w.pressure += 1; }
@@ -415,6 +423,22 @@ pub struct LeNetMastery {
 
 impl LeNetMastery {
     pub fn new(seed: u64) -> Self {
+        let mut rng = Rng::new(seed);
+        Self {
+            conv1_k: T4::random(6, 1, 5, 5, &mut rng, 25),
+            conv1_b: T1::random(6, &mut rng, 5),
+            conv2_k: T4::random(16, 6, 5, 5, &mut rng, 10),
+            conv2_b: T1::random(16, &mut rng, 5),
+            fc1_w: T2::random(120, 256, &mut rng, 5),
+            fc1_b: T1::random(120, &mut rng, 5),
+            // Hidden: frozen random (this is what gives 65%)
+            hidden: MasteryLayer::frozen_random(84, 120, &mut rng),
+            output: MasteryLayer::new(10, 84),
+        }
+    }
+
+    /// Variant with plastic hidden layer (for alternating freeze experiment).
+    pub fn new_with_plastic_hidden(seed: u64) -> Self {
         let mut rng = Rng::new(seed);
         Self {
             conv1_k: T4::random(6, 1, 5, 5, &mut rng, 25),
