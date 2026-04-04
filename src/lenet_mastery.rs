@@ -138,19 +138,38 @@ fn relu_vec_i16(v: &[i16]) -> Vec<i16> { v.iter().map(|&x| x.max(0)).collect() }
 // Mastery learning layer (the only plastic layer)
 // ---------------------------------------------------------------------------
 
-/// A single mastery weight: polarity is structural, magnitude is functional.
+/// Mastery weight: P×M with thermal monitoring.
+///
+/// Polarity = structural direction (-1, 0, +1)
+/// Magnitude = strength (0-255)
+/// Temperature = stability tracker (255=HOT, 0=COLD) — monitoring only, does NOT gate learning
+/// Pressure = accumulated learning signal
 #[derive(Clone)]
 pub struct MasteryWeight {
-    polarity: i8,       // -1, 0, +1
-    magnitude: u8,      // 0-255
-    pressure: i16,      // accumulated directional pressure
+    pub polarity: i8,      // -1, 0, +1
+    pub magnitude: u8,     // 0-255
+    pub temperature: u8,   // 255=HOT, 0=COLD (monitoring, not gating)
+    pub pressure: i16,     // accumulated directional pressure
 }
 
 impl MasteryWeight {
-    fn zero() -> Self { Self { polarity: 0, magnitude: 0, pressure: 0 } }
+    fn zero() -> Self {
+        Self { polarity: 0, magnitude: 0, temperature: 255, pressure: 0 }
+    }
 
-    fn current(&self) -> i16 {
+    /// P × M
+    pub fn current(&self) -> i16 {
         self.polarity as i16 * self.magnitude as i16
+    }
+
+    /// Cool toward stability. Call on correct classifications.
+    fn cool(&mut self, amount: u8) {
+        self.temperature = self.temperature.saturating_sub(amount);
+    }
+
+    /// Warm back up. Call on errors involving this weight.
+    fn warm(&mut self, amount: u8) {
+        self.temperature = self.temperature.saturating_add(amount);
     }
 }
 
@@ -195,6 +214,7 @@ impl MasteryLayer {
                 MasteryWeight {
                     polarity: p,
                     magnitude: (rng.next_u8() % 30) + 10,
+                    temperature: 255,
                     pressure: 0,
                 }
             }
@@ -249,6 +269,8 @@ impl MasteryLayer {
             vec![(label, 1), (predicted, -1)]
         };
 
+        let is_correct = predicted == label;
+
         for &(row, direction) in &rows_to_update {
             for j in 0..self.cols {
                 let input_abs = input[j].unsigned_abs() as u16;
@@ -259,16 +281,24 @@ impl MasteryLayer {
                 // Pressure: direction × input_sign × activity_strength
                 let activity = ((input_abs - activity_threshold) as i32 * 8
                     / max_input as i32).max(1) as i16;
-                let pressure_delta = direction * input_sign * activity;
+                let raw_pressure = direction * input_sign * activity;
 
                 let idx = row * self.cols + j;
                 let w = &mut self.weights[idx];
-                w.pressure = w.pressure.saturating_add(pressure_delta);
+
+                // Mastery pressure (no thermal scaling — full signal)
+                w.pressure = w.pressure.saturating_add(raw_pressure);
+
+                // Thermal tracking: cool on correct, warm on error
+                if is_correct {
+                    w.cool(1);
+                } else {
+                    w.warm(3);
+                }
 
                 // Threshold gate
                 if w.pressure.abs() >= self.pressure_threshold {
                     let needed = if w.pressure > 0 { 1i8 } else { -1 };
-                    // Inline transition
                     if w.polarity == needed {
                         w.magnitude = w.magnitude.saturating_add(self.magnitude_step);
                     } else if w.polarity == -needed {
@@ -287,7 +317,7 @@ impl MasteryLayer {
                 }
             }
 
-            // Bias update: direct adjustment
+            // Bias update
             if direction > 0 {
                 self.bias[row] = (self.bias[row] as i32 + 1).min(500) as i16;
             } else {

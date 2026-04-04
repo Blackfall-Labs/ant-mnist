@@ -1,0 +1,182 @@
+warning: use of deprecated associated function `Signal::from_i16`: defaults multiplier to 1 — use Signal::from_signed_i32(val) for large ranges or construct with explicit multiplier
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:437:15
+    |
+437 |         Self::from_i16(delta)
+    |               ^^^^^^^^
+    |
+    = note: `#[warn(deprecated)]` on by default
+
+warning: use of deprecated associated function `Signal::positive`: use Signal::positive_amplified(mag, mul) — s = p × m × k requires all three values
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:452:19
+    |
+452 |             Self::positive(magnitude)
+    |                   ^^^^^^^^
+
+warning: use of deprecated associated function `Signal::from_spike_rate`: defaults multiplier to 1 — construct Signal with explicit multiplier instead
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:464:15
+    |
+464 |         Self::from_spike_rate(rate_hz, max_rate_hz)
+    |               ^^^^^^^^^^^^^^^
+
+warning: use of deprecated associated function `Signal::from_signed_i32`: defaults multiplier to 1 — use Signal::from_current(val) for full p × m × k range
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:583:15
+    |
+583 |         Self::from_signed_i32(a + b)
+    |               ^^^^^^^^^^^^^^^
+
+warning: use of deprecated associated function `Signal::from_signed_i32`: defaults multiplier to 1 — use Signal::from_current(val) for full p × m × k range
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:632:36
+    |
+632 |             let mut result = Self::from_signed_i32((current + delta as i16) as i32);
+    |                                    ^^^^^^^^^^^^^^^
+
+warning: use of deprecated associated function `Signal::from_signed_i32`: defaults multiplier to 1 — use Signal::from_current(val) for full p × m × k range
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:636:36
+    |
+636 |             let mut result = Self::from_signed_i32((current - delta as i16) as i32);
+    |                                    ^^^^^^^^^^^^^^^
+
+warning: `ternary-signal` (lib) generated 6 warnings
+warning: field `vector_width` is never read
+  --> E:\repos\blackfall-labs\atomic-neural-transistors\src\memory.rs:47:5
+   |
+38 | pub struct MemoryANT {
+   |            --------- field in this struct
+...
+47 |     vector_width: u16,
+   |     ^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: method `resolve_path` is never used
+  --> E:\repos\blackfall-labs\atomic-neural-transistors\src\modules\ant_ml.rs:97:8
+   |
+80 | impl AntRuntime {
+   | --------------- method in this implementation
+...
+97 |     fn resolve_path(&self, path: &str) -> PathBuf {
+   |        ^^^^^^^^^^^^
+
+warning: `atomic-neural-transistors` (lib) generated 2 warnings
+   Compiling ant-mnist v0.1.0 (E:\repos\blackfall-labs\ant-mnist)
+warning: unused import: `MasteryLayer`
+  --> src\lenet_ensemble.rs:15:35
+   |
+15 | use lenet_mastery::{LeNetMastery, MasteryLayer};
+   |                                   ^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `raw_output`
+   --> src\lenet_mastery.rs:360:9
+    |
+360 |         raw_output: &[i16],   // 84-dim (pre-relu hidden output)
+    |         ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_raw_output`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: type `Rng` is more private than the item `MasteryLayer::frozen_random`
+   --> src\lenet_mastery.rs:202:5
+    |
+202 |     pub fn frozen_random(rows: usize, cols: usize, rng: &mut Rng) -> Self {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ associated function `MasteryLayer::frozen_random` is reachable at visibility `pub(crate)`
+    |
+note: but type `Rng` is only usable at visibility `pub(self)`
+   --> src\lenet_mastery.rs:10:1
+    |
+ 10 | struct Rng(u64);
+    | ^^^^^^^^^^
+    = note: `#[warn(private_interfaces)]` on by default
+
+warning: type `Rng` is more private than the item `MasteryLayer::random_init`
+   --> src\lenet_mastery.rs:208:5
+    |
+208 |     pub fn random_init(rows: usize, cols: usize, rng: &mut Rng) -> Self {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ associated function `MasteryLayer::random_init` is reachable at visibility `pub(crate)`
+    |
+note: but type `Rng` is only usable at visibility `pub(self)`
+   --> src\lenet_mastery.rs:10:1
+    |
+ 10 | struct Rng(u64);
+    | ^^^^^^^^^^
+
+warning: associated function `print_image` is never used
+  --> src\mnist.rs:65:12
+   |
+18 | impl MnistDataset {
+   | ----------------- associated function in this implementation
+...
+65 |     pub fn print_image(image: &MnistImage) {
+   |            ^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: associated function `zeros` is never used
+  --> src\lenet_mastery.rs:41:8
+   |
+40 | impl T1 {
+   | ------- associated function in this implementation
+41 |     fn zeros(len: usize) -> Self { Self { data: vec![0; len] } }
+   |        ^^^^^
+
+warning: methods `apply_transition`, `nonzero_count`, and `weight_stats` are never used
+   --> src\lenet_mastery.rs:329:8
+    |
+187 | impl MasteryLayer {
+    | ----------------- methods in this implementation
+...
+329 |     fn apply_transition(&mut self, idx: usize, needed: i8) {
+    |        ^^^^^^^^^^^^^^^^
+...
+425 |     pub fn nonzero_count(&self) -> usize {
+    |            ^^^^^^^^^^^^^
+...
+429 |     pub fn weight_stats(&self) -> (f64, f64) {
+    |            ^^^^^^^^^^^^
+
+warning: associated function `new_with_plastic_hidden` is never used
+   --> src\lenet_mastery.rs:471:12
+    |
+454 | impl LeNetMastery {
+    | ----------------- associated function in this implementation
+...
+471 |     pub fn new_with_plastic_hidden(seed: u64) -> Self {
+    |            ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `ant-mnist` (bin "lenet-ensemble") generated 8 warnings (run `cargo fix --bin "lenet-ensemble" -p ant-mnist` to apply 2 suggestions)
+    Finished `release` profile [optimized] target(s) in 0.99s
+     Running `target\release\lenet-ensemble.exe data 10 3`
+=== Ensemble LeNet-5: 10 voters, 3 epochs ===
+Loading MNIST...
+  train=60000, test=10000
+  per voter: 44426 total, 11014 plastic
+  total: 444260 weights across 10 voters
+  rayon threads: 12
+  E 1 | train 63.2% | test 83.9% | 91s (train 41s + eval 51s) | 96.5MB
+      | d0:91% d1:92% d2:82% d3:83% d4:78% d5:84% d6:92% d7:82% d8:77% d9:77%
+      | voter 0 alone: 67.4%
+      | voter 1 alone: 66.9%
+      | voter 2 alone: 63.7%
+      | voter 3 alone: 40.4%
+      | voter 4 alone: 67.1%
+      | voter 5 alone: 59.9%
+      | voter 6 alone: 63.4%
+      | voter 7 alone: 66.7%
+      | voter 8 alone: 66.3%
+      | voter 9 alone: 70.4%
+  E 2 | train 61.2% | test 83.0% | 91s (train 52s + eval 39s) | 96.5MB
+      | d0:88% d1:91% d2:80% d3:85% d4:67% d5:87% d6:91% d7:82% d8:79% d9:81%
+  E 3 | train 59.8% | test 83.3% | 83s (train 45s + eval 37s) | 96.5MB
+      | d0:86% d1:92% d2:80% d3:83% d4:65% d5:87% d6:92% d7:80% d8:83% d9:85%
+      | voter 0 alone: 65.2%
+      | voter 1 alone: 62.7%
+      | voter 2 alone: 62.3%
+      | voter 3 alone: 40.2%
+      | voter 4 alone: 60.9%
+      | voter 5 alone: 56.2%
+      | voter 6 alone: 61.6%
+      | voter 7 alone: 65.6%
+      | voter 8 alone: 63.5%
+      | voter 9 alone: 68.7%
+
+=== Ensemble complete ===
