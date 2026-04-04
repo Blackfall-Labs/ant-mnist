@@ -512,11 +512,16 @@ impl LeNetMastery {
     }
 
     pub fn predict(&self, image: &[u8]) -> usize {
-        let hidden_out = self.features(image);
-        let output = self.output.forward(&hidden_out);
-        output.iter().enumerate()
+        let scores = self.scores(image);
+        scores.iter().enumerate()
             .max_by_key(|(_, &s)| s)
             .map(|(i, _)| i).unwrap_or(0)
+    }
+
+    /// Return raw output scores for all 10 classes.
+    pub fn scores(&self, image: &[u8]) -> Vec<i16> {
+        let hidden_out = self.features(image);
+        self.output.forward(&hidden_out)
     }
 
     pub fn train_one(&mut self, image: &[u8], label: usize) -> (usize, bool) {

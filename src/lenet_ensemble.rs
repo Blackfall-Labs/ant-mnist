@@ -76,41 +76,74 @@ fn main() {
         let train_acc = total_correct as f64 / (train.len() * n_voters) as f64;
         let train_s = t0.elapsed().as_secs_f64();
 
-        // Evaluate via majority vote
+        // Evaluate via both majority vote and confidence-weighted vote
         let t1 = Instant::now();
-        let mut test_correct = 0u32;
-        let mut pc = [0u32; 10];
+        let mut majority_correct = 0u32;
+        let mut weighted_correct = 0u32;
+        let mut pc_majority = [0u32; 10];
+        let mut pc_weighted = [0u32; 10];
         let mut pt = [0u32; 10];
 
         for i in 0..test.len() {
             let img = &test.images[i];
             let label = img.label as usize;
+
+            // Get scores from all voters
+            let all_scores: Vec<Vec<i16>> = nets.iter()
+                .map(|net| net.scores(&img.pixels))
+                .collect();
+
+            // Majority vote (original)
             let mut votes = [0u32; 10];
-            for net in &nets {
-                let pred = net.predict(&img.pixels);
+            for scores in &all_scores {
+                let pred = scores.iter().enumerate()
+                    .max_by_key(|(_, &s)| s)
+                    .map(|(i, _)| i).unwrap_or(0);
                 if pred < 10 { votes[pred] += 1; }
             }
-            let winner = votes.iter().enumerate().max_by_key(|(_, &v)| v).map(|(i, _)| i).unwrap_or(0);
+            let majority_winner = votes.iter().enumerate()
+                .max_by_key(|(_, &v)| v).map(|(i, _)| i).unwrap_or(0);
+
+            // Normalized confidence vote: normalize each voter's scores to [0,1000]
+            // then sum. Equal voter influence, but continuous scores add info.
+            let mut weighted = [0i64; 10];
+            for scores in &all_scores {
+                let min_s = *scores.iter().min().unwrap_or(&0) as i64;
+                let max_s = *scores.iter().max().unwrap_or(&1) as i64;
+                let range = (max_s - min_s).max(1);
+                for (c, &s) in scores.iter().enumerate() {
+                    weighted[c] += (s as i64 - min_s) * 1000 / range;
+                }
+            }
+            let weighted_winner = weighted.iter().enumerate()
+                .max_by_key(|(_, &w)| w).map(|(i, _)| i).unwrap_or(0);
+
             if label < 10 {
                 pt[label] += 1;
-                if winner == label { test_correct += 1; pc[label] += 1; }
+                if majority_winner == label { majority_correct += 1; pc_majority[label] += 1; }
+                if weighted_winner == label { weighted_correct += 1; pc_weighted[label] += 1; }
             }
         }
 
-        let test_acc = test_correct as f64 / test.len() as f64;
+        let test_acc = weighted_correct as f64 / test.len() as f64;
+        let majority_acc = majority_correct as f64 / test.len() as f64;
         let eval_s = t1.elapsed().as_secs_f64();
         let total_s = t0.elapsed().as_secs_f64();
         let rss = peak_rss_mb();
 
-        let mut pca = [0.0f64; 10];
-        for d in 0..10 { pca[d] = if pt[d] > 0 { pc[d] as f64 / pt[d] as f64 } else { 0.0 }; }
+        let mut pca_w = [0.0f64; 10];
+        let mut pca_m = [0.0f64; 10];
+        for d in 0..10 {
+            pca_w[d] = if pt[d] > 0 { pc_weighted[d] as f64 / pt[d] as f64 } else { 0.0 };
+            pca_m[d] = if pt[d] > 0 { pc_majority[d] as f64 / pt[d] as f64 } else { 0.0 };
+        }
 
-        let pca_str = pca.iter().map(|a| format!("{:.3}", a)).collect::<Vec<_>>().join("|");
-        let pca_short = pca.iter().enumerate().map(|(i, a)| format!("d{}:{:.0}%", i, a * 100.0)).collect::<Vec<_>>().join(" ");
+        let pca_str = pca_w.iter().map(|a| format!("{:.3}", a)).collect::<Vec<_>>().join("|");
+        let pca_short = pca_w.iter().enumerate().map(|(i, a)| format!("d{}:{:.0}%", i, a * 100.0)).collect::<Vec<_>>().join(" ");
 
-        println!("{},{},{:.4},{:.4},{:.1},{:.1},{}", n_voters, epoch, test_acc, train_acc, total_s, rss, pca_str);
-        eprintln!("  E{:2} | train {:.1}% | test {:.1}% | {:.0}s (train {:.0}s + eval {:.0}s) | {:.1}MB",
-            epoch, train_acc * 100.0, test_acc * 100.0, total_s, train_s, eval_s, rss);
+        println!("{},{},{:.4},{:.4},{:.4},{:.1},{:.1},{}", n_voters, epoch, test_acc, majority_acc, train_acc, total_s, rss, pca_str);
+        eprintln!("  E{:2} | majority {:.1}% | weighted {:.1}% | train {:.1}% | {:.0}s | {:.1}MB",
+            epoch, majority_acc * 100.0, test_acc * 100.0, train_acc * 100.0, total_s, rss);
         eprintln!("      | {}", pca_short);
 
         // Evaluate individual voters
