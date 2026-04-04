@@ -1,118 +1,161 @@
 # ANT-MNIST
 
-**CPU-only MNIST digit classification using Atomic Neural Transistors.**
+**90.4% MNIST accuracy using integer-only arithmetic, mastery learning, and frozen random spatial features. No floats. No GPU. Pure Rust on CPU.**
 
-No gradients. No floats. No GPU. Ternary signal processing with pressure-based mastery learning on integer substrates.
+This is Blackfall Labs' proving ground for signal-native machine learning — proving that ternary signal systems can learn real-world classification tasks without floating-point arithmetic or traditional gradient descent.
 
 ---
 
-## How It Works
+## Results
 
-### Architecture: Correlation Detectors → Finalizer
+| System | Test Accuracy | Weights | Learning | Time/Epoch |
+|--------|--------------|---------|----------|------------|
+| f32 LeNet-5 (backprop, all layers) | **98.8%** | 44,426 (all plastic) | SGD | 32s |
+| **8-pair dual hemisphere ensemble** | **90.4%** | 710K (13.6K plastic) | Gradient-mastery-thermal | 153s |
+| 5-pair dual hemisphere | 89.9% | 444K (8.5K plastic) | Gradient-mastery-thermal | 112s |
+| Gradient-mastery hybrid (10v) | 89.5% | 444K (8.5K plastic) | Gradient-mastery | 58s |
+| 15-voter mastery | 86.4% | 666K (12.7K plastic) | Pure mastery | 94s |
+| 10-voter mastery | 84.0% | 444K (8.5K plastic) | Mastery + thermal step | 72s |
+| Single mastery | 67.4% | 44K (850 plastic) | Pure mastery | 16s |
+| P×M×K basin learning | 31.7% | 44K (840 plastic) | Basin update | 23s |
+| Flow weights (single layer) | 13.2% | 7,840 | Momentum-based | ~100ms |
+
+---
+
+## Architecture
 
 ```
-Input Image (28×28 = 784 pixels)
-  ↓ encode
-784 ternary signals (Polarity × Magnitude × Multiplier)
-  ↓ fan out to 10 detectors
-┌──────────────────────────────────────────────────┐
-│ Detector 0 (imprinted on "0"): correlate → 784  │
-│ Detector 1 (imprinted on "1"): correlate → 784  │
-│ ...                                              │
-│ Detector 9 (imprinted on "9"): correlate → 784  │
-└──────────────────────────────────────────────────┘
-  ↓ concatenate
-7840 correlation signals
-  ↓ finalizer ANT
-10 class scores
-  ↓ argmax
-Predicted digit (0-9)
+Input (28×28 pixels, i16)
+  → Conv1 (6 × 5×5, FROZEN random i16) → ReLU → AvgPool 2×2
+  → Conv2 (16 × 6×5×5, FROZEN random i16) → ReLU → AvgPool 2×2
+  → FC1 (256→120, FROZEN random i16) → ReLU
+  → FC2 (120→84, FROZEN random i16) → ReLU
+  → FC3 (84→10, GRADIENT-MASTERY LEARNING) ← only this layer learns
 ```
 
-**Detectors** are imprinted — not trained. Each detector absorbs examples of its target digit, building a spatial template. When shown an input image, it produces 784 confidence signals: one per pixel position, where each signal encodes:
-- **Polarity**: does this pixel agree (+1) or disagree (-1) with the template?
-- **Magnitude**: how strong is the feature at this position?
-- **Multiplier**: how consistently was this position active across imprinted samples?
+### Dual Hemisphere
 
-This preserves spatial structure all the way through — the detector doesn't collapse to a single "yes/no." It returns a **field of confidence** showing where and how much the input matches its template.
+Each pair consists of two networks with:
+- **Different random seeds** — different spatial feature extraction
+- **Different pressure thresholds** (8 vs 12) — different learning sensitivity
+- **Combined output** — full sum of both hemispheres, no information loss
 
-**The Finalizer** takes all 10 correlation maps (7840 signals total) and learns which spatial patterns of agreement/disagreement reliably indicate each digit. This is where mastery learning happens — pressure-based, integer-only, no gradients.
+Multiple pairs are ensembled by summing their combined outputs. The class with the highest total score wins.
 
-### How This Differs From Standard ML
+### Weight Representation
 
-| Aspect | Standard ML (CNN/MLP) | ANT-MNIST |
-|--------|----------------------|-----------|
-| **Representation** | 32-bit floats | Ternary signals (Polarity × Magnitude × Multiplier) |
-| **Feature extraction** | Learned via backpropagation | Imprinted from examples (direct pattern absorption) |
-| **Classification** | Softmax over learned features | Mastery learning over correlation patterns |
-| **Learning rule** | Gradient descent (calculus) | Pressure accumulation → threshold → transition (integer) |
-| **Hardware** | GPU (massive float parallelism) | CPU (integer ops only) |
-| **Weight updates** | Continuous (any float value) | Discrete (weaken-before-flip, step up/down) |
-| **Plasticity control** | Learning rate schedules | Per-weight thermal state (HOT/WARM/COOL/COLD) |
-| **Runtime** | Python + PyTorch, compiled graph | Runes scripts, hot-reloadable without recompilation |
-| **Initialization** | Random (Xavier, He, etc.) | Imprinting (direct pattern absorption from examples) |
+```
+MasteryWeight = [polarity: i8, magnitude: u8, temperature: u8, pressure: i16]
+                 5 bytes per weight
+```
 
-### How This Connects to the Original MNIST (LeCun 1998)
+- **Polarity × Magnitude** = signal value (the weight)
+- **Temperature** = stability tracker (255=HOT/plastic, 0=COLD/stable)
+- **Pressure** = gradient accumulator (resets on commit)
 
-LeCun's original LeNet-5 used:
-- Convolutional layers to extract spatial features (edges, strokes)
-- Subsampling (pooling) to build translation invariance
-- Fully connected layers for classification
-- Backpropagation with gradient descent
-- Achieved 99.05% on the full test set
+### Learning Rule: Gradient-Mastery-Thermal Hybrid
 
-Our approach replaces every component:
-- **Convolution → Imprinted templates.** Instead of learning edge detectors through thousands of gradient updates, we directly absorb digit patterns from examples. The imprinted template IS the feature detector.
-- **Pooling → Signal correlation.** Instead of downsampling to build invariance, the element-wise correlation naturally handles positional variation — a stroke at position [5,12] in the template still partially correlates with a stroke at [5,13] in the input because neighboring pixels have similar magnitudes.
-- **Fully connected → Finalizer ANT.** Instead of learned float weights connecting features to classes, the finalizer uses pressure-based mastery learning on ternary signals.
-- **Backpropagation → Mastery learning.** Instead of computing gradients through the entire network, only the finalizer learns. The detectors are passive after imprinting.
+A fusion of three mechanisms:
 
-### Key Findings
+1. **Gradient signal**: Softmax cross-entropy gradient computed in i32. Provides precise error direction. No backpropagation through frozen layers — only the output layer gradient is needed.
 
-**Curriculum sensitivity.** The system responds strongly to training set size per cycle:
-- **50 samples/digit** (500 total): Steady improvement. Low variety means pressure accumulates consistently in the right direction. Each pattern repeats enough times to cross mastery threshold.
-- **200 samples/digit** (2000 total): Accuracy tanks. Too much handwriting variety per cycle — pressure from one sample gets contradicted by another before threshold is reached. The finalizer can't lock in any pattern.
-- **Alternating 50-200-50-200**: Best results. The small set builds foundation (consistent pressure → transitions). The large set stress-tests (exposes weaknesses, corrects errors). The small set re-stabilizes. This pattern produces stable climbing accuracy, reaching 17% from a baseline of 10%.
+2. **Mastery accumulation**: Gradient is accumulated into each weight's `pressure` field across samples. Weight only updates when `|pressure| >= threshold`. This acts as a natural mini-batch — smoothing per-sample noise and preventing oscillation.
 
-This mirrors biological learning: focused repetition (drilling) builds skill, varied exposure (generalization) tests it, then focused repetition repairs what broke.
+3. **Thermal-adaptive step size**: When pressure crosses threshold, the magnitude of the update is capped by the weight's temperature band:
+   - HOT (temp >= 192): max step ±8 (coarse alignment, early learning)
+   - WARM (temp >= 128): max step ±5
+   - COOL (temp >= 64): max step ±3 (fine tuning)
+   - COLD (temp < 64): max step ±1 (precision adjustment)
 
-**Imprinting vs random projection.** Random hidden projections (the standard approach in reservoir computing) failed completely on MNIST — the projections were too similar across detectors and produced no discriminative features. Imprinting from actual digit examples produces templates that reflect real spatial structure: the "1" template has a vertical green stripe, the "0" has a green loop, the "7" has a horizontal bar. These are meaningful feature detectors, not noise.
+Temperature cools by 1 on correct classifications, warms by 3 on errors. This creates per-weight adaptive learning rate without any floating-point computation.
 
-**The detector-as-correlator model.** Treating detectors as spatial correlation reporters (returning 784 signals) rather than binary classifiers (returning 1 scalar) preserves information that the finalizer needs. The finalizer can learn "detector 5 fires strongly in the top-left but weakly in the bottom means this is a 5, not a 6" — something a single confidence scalar couldn't express.
+### Why Frozen Random Features Work
 
-**Output weight initialization matters.** Mastery learning cannot transition weights from zero — pressure needs something to push against. The original approach (all-zero output weights) produced permanent mode collapse because every detector returned the same value and argmax always picked the last tied index.
+Convolutional layers and FC1/FC2 are initialized with random integer weights and never updated. This works because:
+
+1. **Random projections create class separation** — even random spatial filters detect edges, textures, and patterns that vary across digit classes (Johnson-Lindenstrauss lemma)
+2. **The output layer only needs to learn alignment** — which random features matter for which class
+3. **No gradient truncation** — the problem with i16 backprop through all layers was bit-shift precision loss. With only one plastic layer, gradient precision is maintained
+
+---
+
+## Key Findings
+
+### What works
+
+| Technique | Contribution |
+|-----------|-------------|
+| Frozen random conv/FC layers | Foundation — provides feature separation without learning |
+| Gradient-mastery hybrid | +5.5% over pure mastery (89.5 vs 84.0) |
+| Dual hemispheres | +0.4% and much better single-pair accuracy (87.6 vs 67.4) |
+| Thermal-adaptive step size | +0.1% and significantly better epoch stability |
+| Ensemble (more voters) | +6% from 3 to 15 voters, diminishing returns above 10 |
+| Normalized confidence voting | Matches majority vote but more stable over epochs |
+
+### What doesn't work
+
+| Technique | Result | Why |
+|-----------|--------|-----|
+| Learning hidden layers | 65% to 15% | Destabilizes features the output depends on |
+| Alternating freeze | 67% to 14% to 21% | Hidden learning corrupts features permanently |
+| i16 backprop through all layers | 10% (random) | Gradient dies from bit-shift precision loss |
+| P×M×K multiplier in weights | 84% to 35% | Changes effective values, disrupts frozen feature pipeline |
+| Temperature gating learning | 84% to 79% | Dampens gradients before weights differentiate |
+| Temperature in forward pass | 84% to 79-83% | All weights start hot, any modification hurts epoch 1 |
+| Lateral inhibition (suppression) | 90% to 83% | Confident wrong hemisphere destroys correct signal |
+| Raw score voting | 84% to 79% | Uncalibrated voters with big scores dominate |
+| Margin-weighted voting | 84% to 81% | Confident wrong voters dominate |
+| Single-layer classifier (any learning rule) | 10-13% | Pixel-level signal too noisy for 10-class discrimination |
+
+### Temperature's role (proven)
+
+- **Forward pass**: NO — clean signal, no interference
+- **Step size**: YES — per-weight adaptive learning rate (HOT=8, COLD=1)
+- **Monitoring**: YES — cool on correct, warm on error (free observability)
+
+---
+
+## Confusion Analysis
+
+Top digit confusions at 84% accuracy (10-voter mastery):
+
+```
+4 -> 9 : 103 errors    (vertical stroke + top curve overlap)
+9 -> 4 :  76 errors
+7 -> 9 :  62 errors    (diagonal stroke confusion)
+8 -> 5 :  62 errors    (loop vs curve)
+3 -> 8 :  60 errors    (similar curves)
+```
+
+These confusions come from the frozen random conv filters not distinguishing specific spatial features (the difference between a 4's crossing and a 9's curve). The f32 version learns these distinctions through backprop; our system compensates with ensemble diversity.
+
+### Voter agreement analysis (10 voters)
+
+- 9.5% of samples: all voters agree (99.8% correct when unanimous)
+- 84.0%: majority correct
+- 14.1%: majority wrong but at least one voter correct (opportunity)
+- 1.9%: all voters wrong (hard ceiling at 190 samples)
+- Voter agreement: 50-60% pairwise (genuine diversity)
 
 ---
 
 ## Running
 
-### Control Room (Dashboard)
-
 ```bash
-cargo run --release --bin ant-mnist-viz [data_dir] [port]
+# f32 baseline
+cargo run --release --bin lenet-experiment -- data
+
+# 10-voter mastery ensemble
+cargo run --release --bin lenet-ensemble -- data 10 3
+
+# 8-pair dual hemisphere (best result)
+cargo run --release --bin lenet-dual-hemi -- data 8 3
+
+# Voter disagreement analysis
+cargo run --release --bin voter-analysis -- data
 ```
 
-Opens a web dashboard at `http://localhost:8090` with:
-- **Per-detector panels**: template heatmap (green=excitatory, red=inhibitory), correct/wrong examples, confidence sparkline
-- **Operator controls**: Imprint All, Train Cycle (50/digit), Train Cycle (200/digit), Evaluate, Freeze All
-- **Per-detector controls**: Imprint, Train, Freeze, Thaw, Flush
-- **Confusion matrix**: 10×10 grid showing classification distribution
-- **Accuracy history**: test accuracy over cycles
-- **Action log**: every operation logged with results
-
-### Operator Workflow
-
-1. **Imprint All (50)** — detectors absorb 50 examples each. Heatmaps populate.
-2. **Evaluate (1000)** — see baseline accuracy and confusion matrix.
-3. **Train Cycle (50/digit)** — train finalizer on small balanced set. Repeat 5×.
-4. **Train Cycle (200/digit)** — stress test with more variety. Repeat 2×.
-5. **Train Cycle (50/digit)** — re-stabilize. Repeat 5×.
-6. **Evaluate (1000)** — check progress.
-7. Repeat 3-6, watching the confusion matrix and accuracy curve.
-
-### MNIST Data
-
-Place the IDX files in `data/`:
+MNIST data files go in `data/`:
 - `train-images-idx3-ubyte`
 - `train-labels-idx1-ubyte`
 - `t10k-images-idx3-ubyte`
@@ -120,37 +163,61 @@ Place the IDX files in `data/`:
 
 ---
 
-## Architecture
+## Resource Profile (8-pair dual hemisphere)
 
-```
-ant-mnist/
-  runes/
-    digit_detector.rune  — spatial correlation detector (imprint + correlate)
-    finalizer.rune       — 7840→10 classification (mastery learning)
-  src/
-    main.rs              — Runes-first runtime (loads .rune as the program)
-    viz.rs               — Control room dashboard
-    viz_specialist.html  — Dashboard frontend
-    mnist.rs             — IDX file parser
-    mnist_module.rs      — MNIST-specific Runes verbs
-```
-
-### Dependencies
-
-- **atomic-neural-transistors** — ANT runtime, mastery learning, thermal weights
-- **runes** — Hot-reloadable behavioral scripting (meta/main/hook/def)
-- **ternary-signal** — Signal type (Polarity × Magnitude × Multiplier)
+| Metric | Value |
+|--------|-------|
+| Test accuracy | 90.4% |
+| Total weights | 710,816 |
+| Plastic weights | 13,600 (output layers only) |
+| Weight memory (i16) | 1.39 MB |
+| Weight memory (5-byte MasteryWeight) | 3.47 MB |
+| Process RSS | 96.5 MB (includes MNIST data) |
+| Training time | 153s/epoch (16 voters on 12 threads via rayon) |
+| Per-weight size | 5 bytes (polarity + magnitude + temperature + pressure) |
 
 ---
 
-## Status
+## File Structure
 
-- Architecture proven: correlation detectors + finalizer produces above-random classification
-- Mastery learning responds to curriculum tuning (50/200 alternation)
-- Dashboard provides operator control over training process
-- Accuracy: 17% best (from 10% baseline) — early stage, needs continued tuning
-- Next: React/WebSocket dashboard for real-time observation, continued mastery tuning, expanded curriculum strategies
+```
+src/
+  lenet_f32.rs           -- f32 LeNet-5 baseline (98.8%)
+  lenet_mastery.rs       -- MasteryWeight + MasteryLayer + LeNetMastery
+  lenet_i16.rs           -- P*M*K signal weight variant (31.7%)
+  lenet_ensemble.rs      -- N-voter ensemble with rayon
+  lenet_dual_hemi.rs     -- Dual hemisphere pairs (90.4%)
+  lenet_thermal.rs       -- ThermalWeight from atomic-neural-transistors
+  lenet_sweep.rs         -- Multi-variant sweep runner
+  lenet_experiment.rs    -- Original dual experiment runner
+  flow.rs                -- FlowWeight momentum prototype (13.2%)
+  flow_experiment.rs     -- Flow weight experiment runner
+  voter_analysis.rs      -- Voter disagreement analysis
+  viz.rs                 -- WebSocket dashboard (detector architecture)
+  mnist.rs               -- MNIST IDX file parser
+  main.rs                -- Original CLI trainer
+
+experiments/             -- CSV results and logs from all runs
+dashboard/               -- React 19 + Vite + Tailwind dashboard
+runes/                   -- Runes scripts for detector architecture
+```
 
 ---
 
-*Blackfall Labs — Neuromorphic systems. Not machine learning.*
+## What This Proves
+
+1. **Signal-native ML works.** Integer-only arithmetic can learn spatial classification on a standard benchmark. 90.4% on MNIST with no floats.
+
+2. **Frozen random projections are powerful.** You don't need to learn conv filters. Random spatial filters provide sufficient feature separation. Learning only needs to happen on the final classification layer.
+
+3. **Mastery learning is competitive.** Pressure-gated gradient accumulation with thermal-adaptive step sizes matches or exceeds naive integer SGD. The hysteresis prevents oscillation that kills raw per-sample updates.
+
+4. **Temperature has a real role.** Not as a gate (kills learning), but as a per-weight adaptive learning rate. Cold weights make precise adjustments. Hot weights make bold moves.
+
+5. **Dual hemispheres beat ensembles.** Two networks with different sensitivity, combined by simple addition, outperform the same number of independent voters. Complementary processing beats redundant processing.
+
+6. **The ceiling is in the features.** Every experiment confirms: voting tricks, learning rule improvements, and architectural variations all plateau at the same ceiling. The remaining 8.4-point gap to f32 lives in the frozen random features vs learned conv filters.
+
+---
+
+*Blackfall Labs — Neuromorphic systems. Not machine learning. But when we do ML, we do it in integers.*
