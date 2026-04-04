@@ -16,6 +16,8 @@ impl Rng {
         self.0 ^= self.0 << 17;
         self.0
     }
+    fn next_u8(&mut self) -> u8 { (self.next_u64() & 0xFF) as u8 }
+    fn range_i8(&mut self) -> i8 { (self.next_u64() % 3) as i8 - 1 }
     fn range_i16(&mut self, lo: i16, hi: i16) -> i16 {
         let range = (hi - lo + 1) as u64;
         (lo as i64 + (self.next_u64() % range) as i64) as i16
@@ -130,6 +132,7 @@ fn fc(input: &[i16], w: &T2, bias: &T1) -> Vec<i16> {
 }
 
 fn relu_vec(v: &[i16]) -> Vec<i16> { v.iter().map(|&x| x.max(0)).collect() }
+fn relu_vec_i16(v: &[i16]) -> Vec<i16> { v.iter().map(|&x| x.max(0)).collect() }
 
 // ---------------------------------------------------------------------------
 // Mastery learning layer (the only plastic layer)
@@ -137,7 +140,7 @@ fn relu_vec(v: &[i16]) -> Vec<i16> { v.iter().map(|&x| x.max(0)).collect() }
 
 /// A single mastery weight: polarity is structural, magnitude is functional.
 #[derive(Clone)]
-struct MasteryWeight {
+pub struct MasteryWeight {
     polarity: i8,       // -1, 0, +1
     magnitude: u8,      // 0-255
     pressure: i16,      // accumulated directional pressure
@@ -152,10 +155,10 @@ impl MasteryWeight {
 }
 
 pub struct MasteryLayer {
-    weights: Vec<MasteryWeight>,  // rows × cols
+    pub weights: Vec<MasteryWeight>,  // rows × cols
     bias: Vec<i16>,
-    rows: usize,
-    cols: usize,
+    pub rows: usize,
+    pub cols: usize,
     pressure_threshold: i16,
     magnitude_step: u8,
     pub steps: u64,
@@ -165,7 +168,31 @@ pub struct MasteryLayer {
 impl MasteryLayer {
     fn new(rows: usize, cols: usize) -> Self {
         Self {
-            weights: vec![MasteryWeight::zero(); rows * cols],
+            weights: (0..rows * cols).map(|_| MasteryWeight::zero()).collect(),
+            bias: vec![0i16; rows],
+            rows, cols,
+            pressure_threshold: 8,
+            magnitude_step: 5,
+            steps: 0,
+            transitions: 0,
+        }
+    }
+
+    fn random_init(rows: usize, cols: usize, rng: &mut Rng) -> Self {
+        let weights = (0..rows * cols).map(|_| {
+            let p = rng.range_i8();
+            if p == 0 {
+                MasteryWeight::zero()
+            } else {
+                MasteryWeight {
+                    polarity: p,
+                    magnitude: (rng.next_u8() % 30) + 10,
+                    pressure: 0,
+                }
+            }
+        }).collect();
+        Self {
+            weights,
             bias: vec![0i16; rows],
             rows, cols,
             pressure_threshold: 8,
@@ -282,6 +309,73 @@ impl MasteryLayer {
         self.transitions += 1;
     }
 
+    /// Learn as a hidden layer: use output layer weights to derive error signal.
+    ///
+    /// For each hidden neuron j:
+    ///   If output_weights[label][j] is positive → this neuron SHOULD fire for correct class
+    ///   If output_weights[predicted][j] is positive → this neuron contributed to wrong answer
+    ///
+    /// Direction = sign(output_weight[label][j]) - sign(output_weight[predicted][j])
+    pub fn learn_hidden(
+        &mut self,
+        input: &[i16],        // 120-dim (from frozen FC1)
+        raw_output: &[i16],   // 84-dim (pre-relu hidden output)
+        output_layer: &MasteryLayer,  // the output layer (10×84)
+        label: usize,
+        predicted: usize,
+    ) {
+        if predicted == label { return; } // correct — don't mess with hidden
+        self.steps += 1;
+
+        let max_input = input.iter().map(|x| x.unsigned_abs() as u32).max().unwrap_or(1).max(1);
+        let activity_threshold = (max_input / 4) as u16;
+
+        for j in 0..self.rows {
+            // Derive direction from output layer weights
+            let correct_w = output_layer.weights[label * output_layer.cols + j].current();
+            let wrong_w = output_layer.weights[predicted * output_layer.cols + j].current();
+
+            // If correct class wants this neuron positive but wrong class also wants it:
+            // the hidden neuron needs to differentiate
+            let direction: i16 = (correct_w.signum() - wrong_w.signum()) as i16;
+            if direction == 0 { continue; }
+
+            // Only update weights for active inputs
+            for k in 0..self.cols {
+                let input_abs = input[k].unsigned_abs() as u16;
+                if input_abs <= activity_threshold { continue; }
+
+                let input_sign = if input[k] > 0 { 1i16 } else { -1 };
+                let activity = ((input_abs - activity_threshold) as i32 * 8
+                    / max_input as i32).max(1) as i16;
+                let pressure_delta = direction * input_sign * activity;
+
+                let idx = j * self.cols + k;
+                let w = &mut self.weights[idx];
+                w.pressure = w.pressure.saturating_add(pressure_delta);
+
+                if w.pressure.abs() >= self.pressure_threshold {
+                    let needed = if w.pressure > 0 { 1i8 } else { -1 };
+                    if w.polarity == needed {
+                        w.magnitude = w.magnitude.saturating_add(self.magnitude_step);
+                    } else if w.polarity == -needed {
+                        if w.magnitude <= self.magnitude_step {
+                            w.magnitude = 0;
+                            w.polarity = 0;
+                        } else {
+                            w.magnitude -= self.magnitude_step;
+                        }
+                    } else {
+                        w.polarity = needed;
+                        w.magnitude = self.magnitude_step;
+                    }
+                    self.transitions += 1;
+                    w.pressure = 0;
+                }
+            }
+        }
+    }
+
     /// Decay pressure toward zero. Call between cycles.
     fn decay(&mut self) {
         for w in &mut self.weights {
@@ -314,9 +408,9 @@ pub struct LeNetMastery {
     conv1_k: T4, conv1_b: T1,
     conv2_k: T4, conv2_b: T1,
     fc1_w: T2, fc1_b: T1,
-    fc2_w: T2, fc2_b: T1,
-    // Plastic output layer
-    pub output: MasteryLayer,
+    // Plastic layers (mastery learning)
+    pub hidden: MasteryLayer,   // FC2: 120 → 84
+    pub output: MasteryLayer,   // FC3: 84 → 10
 }
 
 impl LeNetMastery {
@@ -329,14 +423,13 @@ impl LeNetMastery {
             conv2_b: T1::random(16, &mut rng, 5),
             fc1_w: T2::random(120, 256, &mut rng, 5),
             fc1_b: T1::random(120, &mut rng, 5),
-            fc2_w: T2::random(84, 120, &mut rng, 8),
-            fc2_b: T1::random(84, &mut rng, 5),
+            hidden: MasteryLayer::random_init(84, 120, &mut rng),
             output: MasteryLayer::new(10, 84),
         }
     }
 
-    /// Forward pass through frozen layers, returning the 84-dim feature vector.
-    pub fn features(&self, image: &[u8]) -> Vec<i16> {
+    /// Forward through frozen conv/fc1, returning 120-dim features.
+    fn frozen_features(&self, image: &[u8]) -> Vec<i16> {
         let mut input = T3::zeros(1, 28, 28);
         for y in 0..28 {
             for x in 0..28 {
@@ -348,31 +441,51 @@ impl LeNetMastery {
         let x = avgpool(&x);
         let x = relu(&conv2d(&x, &self.conv2_k, &self.conv2_b));
         let x = avgpool(&x);
-        let x = relu_vec(&fc(&x.data, &self.fc1_w, &self.fc1_b));
-        relu_vec(&fc(&x, &self.fc2_w, &self.fc2_b))
+        relu_vec(&fc(&x.data, &self.fc1_w, &self.fc1_b))
+    }
+
+    /// Full forward: frozen → hidden (plastic) → output (plastic)
+    pub fn features(&self, image: &[u8]) -> Vec<i16> {
+        let fc1_out = self.frozen_features(image);
+        relu_vec_i16(&self.hidden.forward(&fc1_out))
     }
 
     pub fn predict(&self, image: &[u8]) -> usize {
-        let feats = self.features(image);
-        let output = self.output.forward(&feats);
+        let hidden_out = self.features(image);
+        let output = self.output.forward(&hidden_out);
         output.iter().enumerate()
             .max_by_key(|(_, &s)| s)
             .map(|(i, _)| i).unwrap_or(0)
     }
 
     pub fn train_one(&mut self, image: &[u8], label: usize) -> (usize, bool) {
-        let feats = self.features(image);
-        let output = self.output.forward(&feats);
+        // Forward through frozen layers
+        let fc1_out = self.frozen_features(image);
+
+        // Forward through hidden (plastic)
+        let hidden_raw = self.hidden.forward(&fc1_out);
+        let hidden_out = relu_vec_i16(&hidden_raw);
+
+        // Forward through output (plastic)
+        let output = self.output.forward(&hidden_out);
         let predicted = output.iter().enumerate()
             .max_by_key(|(_, &s)| s)
             .map(|(i, _)| i).unwrap_or(0);
 
-        self.output.learn(&feats, &output, label);
+        // Learn output layer (direct: knows the label)
+        self.output.learn(&hidden_out, &output, label);
+
+        // Learn hidden layer (indirect: strengthen neurons that contributed
+        // to the correct output, weaken those that contributed to wrong output)
+        // The error signal for the hidden layer is derived from the output error:
+        // which hidden neurons fed the correct class vs the predicted class.
+        self.hidden.learn_hidden(&fc1_out, &hidden_raw, &self.output, label, predicted);
 
         (predicted, predicted == label)
     }
 
     pub fn decay(&mut self) {
+        self.hidden.decay();
         self.output.decay();
     }
 
@@ -380,11 +493,12 @@ impl LeNetMastery {
         self.conv1_k.data.len() + self.conv1_b.data.len()
         + self.conv2_k.data.len() + self.conv2_b.data.len()
         + self.fc1_w.data.len() + self.fc1_b.data.len()
-        + self.fc2_w.data.len() + self.fc2_b.data.len()
+        + self.hidden.weights.len() + self.hidden.bias.len()
         + self.output.weights.len() + self.output.bias.len()
     }
 
     pub fn plastic_weights(&self) -> usize {
-        self.output.weights.len() + self.output.bias.len()
+        self.hidden.weights.len() + self.hidden.bias.len()
+        + self.output.weights.len() + self.output.bias.len()
     }
 }

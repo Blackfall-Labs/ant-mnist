@@ -186,9 +186,11 @@ fn main() {
             .map(|(i, a)| format!("d{}:{:.0}%", i, a * 100.0))
             .collect::<Vec<_>>().join(" ");
 
-        eprintln!("  Epoch {:2} | train {:.1}% | test {:.1}% | {:.0}s | nz {}/{} | s:{} t:{} | {:.1}MB",
+        eprintln!("  Epoch {:2} | train {:.1}% | test {:.1}% | {:.0}s | hidden nz {}/{} s:{} t:{} | output nz {}/{} s:{} t:{} | {:.1}MB",
             epoch, train_acc * 100.0, test_acc * 100.0, epoch_s,
-            netm.output.nonzero_count(), netm.plastic_weights(),
+            netm.hidden.nonzero_count(), netm.hidden.weights.len(),
+            netm.hidden.steps, netm.hidden.transitions,
+            netm.output.nonzero_count(), netm.output.weights.len(),
             netm.output.steps, netm.output.transitions, rss);
         eprintln!("         | {}", pca_short);
     }
