@@ -290,10 +290,19 @@ impl MasteryLayer {
                 // Thermal tracking
                 if is_correct { w.cool(1); } else { w.warm(3); }
 
-                // Apply accumulated gradient when pressure is significant
+                // Apply accumulated gradient with thermal-adaptive step
                 if w.pressure.abs() >= self.pressure_threshold {
-                    let update = w.pressure / self.pressure_threshold;
-                    let new_val = (w.current() as i32 - update as i32).clamp(-255, 255);
+                    // Thermal step: hot=large update, cold=precise
+                    let max_step = if w.temperature >= 192 { 8i32 }
+                        else if w.temperature >= 128 { 5 }
+                        else if w.temperature >= 64 { 3 }
+                        else { 1 };
+
+                    let direction = w.pressure.signum() as i32;
+                    let raw_update = (w.pressure / self.pressure_threshold).abs() as i32;
+                    let update = (raw_update.min(max_step)) * direction;
+
+                    let new_val = (w.current() as i32 - update).clamp(-255, 255);
 
                     if new_val > 0 {
                         w.polarity = 1;
