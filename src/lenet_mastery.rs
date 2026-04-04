@@ -243,81 +243,67 @@ impl MasteryLayer {
         output
     }
 
-    /// Mastery learning step.
+    /// Backprop learning on a single output layer.
     ///
-    /// Only updates weights feeding the target class and the predicted class.
-    /// Participation-gated: only active inputs contribute.
-    /// Pressure accumulates over samples. Transitions happen when pressure
-    /// crosses threshold.
+    /// Softmax cross-entropy gradient → SGD weight update.
+    /// Gradients computed in i32, weights updated as i16.
+    /// No pressure, no participation gating — direct gradient descent.
     pub fn learn(&mut self, input: &[i16], output: &[i16], label: usize) {
         self.steps += 1;
 
         let predicted = output.iter().enumerate()
             .max_by_key(|(_, &s)| s)
             .map(|(i, _)| i).unwrap_or(0);
-
-        // Participation threshold: top 25% of input activity
-        let max_input = input.iter().map(|x| x.unsigned_abs() as u32).max().unwrap_or(1).max(1);
-        let activity_threshold = (max_input / 4) as u16;
-
-        // Only update two rows: the correct class and the predicted class
-        let rows_to_update: Vec<(usize, i16)> = if predicted == label {
-            // Correct: reinforce the correct class
-            vec![(label, 1)]
-        } else {
-            // Wrong: strengthen correct, weaken predicted
-            vec![(label, 1), (predicted, -1)]
-        };
-
         let is_correct = predicted == label;
 
-        for &(row, direction) in &rows_to_update {
+        // Softmax approximation in integer: exp-like scaling
+        let max_out = *output.iter().max().unwrap_or(&0) as i32;
+        let mut exps = [0i32; 10];
+        let mut exp_sum = 0i32;
+        for i in 0..self.rows.min(10) {
+            // Approximate exp(x - max) with linear clamp: max(1, 1000 + (x-max)*8)
+            let diff = output[i] as i32 - max_out;
+            exps[i] = (1000 + diff * 8).max(1);
+            exp_sum += exps[i];
+        }
+        if exp_sum == 0 { exp_sum = 1; }
+
+        // Gradient: softmax_output - one_hot_target
+        // Scaled to [-1000, 1000] range
+        let mut grad = [0i32; 10];
+        for i in 0..self.rows.min(10) {
+            let softmax_i = exps[i] * 1000 / exp_sum; // [0, 1000]
+            let target_i = if i == label { 1000 } else { 0 };
+            grad[i] = softmax_i - target_i; // [-1000, 1000]
+        }
+
+        // Accumulate gradient into pressure (like mastery but continuous).
+        // pressure acts as a gradient accumulator. Apply when |pressure| > threshold.
+        for i in 0..self.rows.min(10) {
+            if grad[i] == 0 { continue; }
             for j in 0..self.cols {
-                let input_abs = input[j].unsigned_abs() as u16;
-                if input_abs <= activity_threshold { continue; }
+                let g = (grad[i] as i64 * input[j] as i64 / 5000) as i16;
 
-                let input_sign = if input[j] > 0 { 1i16 } else { -1 };
+                let w = &mut self.weights[i * self.cols + j];
+                w.pressure = w.pressure.saturating_add(g);
 
-                // Pressure: direction × input_sign × activity_strength
-                let activity = ((input_abs - activity_threshold) as i32 * 8
-                    / max_input as i32).max(1) as i16;
-                let raw_pressure = direction * input_sign * activity;
+                // Thermal tracking
+                if is_correct { w.cool(1); } else { w.warm(3); }
 
-                let idx = row * self.cols + j;
-                let w = &mut self.weights[idx];
-
-                // Mastery pressure (no thermal scaling — full signal)
-                w.pressure = w.pressure.saturating_add(raw_pressure);
-
-                // Thermal tracking: cool on correct, warm on error
-                if is_correct {
-                    w.cool(1);
-                } else {
-                    w.warm(3);
-                }
-
-                // Threshold gate
+                // Apply accumulated gradient when pressure is significant
                 if w.pressure.abs() >= self.pressure_threshold {
-                    let needed = if w.pressure > 0 { 1i8 } else { -1 };
+                    let update = w.pressure / self.pressure_threshold;
+                    let new_val = (w.current() as i32 - update as i32).clamp(-255, 255);
 
-                    // Thermal-adaptive step: hot=big, cold=precise
-                    let step = if w.temperature >= 192 { 5u8 }
-                        else if w.temperature >= 128 { 3 }
-                        else if w.temperature >= 64 { 2 }
-                        else { 1 };
-
-                    if w.polarity == needed {
-                        w.magnitude = w.magnitude.saturating_add(step);
-                    } else if w.polarity == -needed {
-                        if w.magnitude <= step {
-                            w.magnitude = 0;
-                            w.polarity = 0;
-                        } else {
-                            w.magnitude -= step;
-                        }
+                    if new_val > 0 {
+                        w.polarity = 1;
+                        w.magnitude = new_val as u8;
+                    } else if new_val < 0 {
+                        w.polarity = -1;
+                        w.magnitude = (-new_val) as u8;
                     } else {
-                        w.polarity = needed;
-                        w.magnitude = step;
+                        w.polarity = 0;
+                        w.magnitude = 0;
                     }
                     self.transitions += 1;
                     w.pressure = 0;
@@ -325,12 +311,11 @@ impl MasteryLayer {
             }
 
             // Bias update
-            if direction > 0 {
-                self.bias[row] = (self.bias[row] as i32 + 1).min(500) as i16;
-            } else {
-                self.bias[row] = (self.bias[row] as i32 - 1).max(-500) as i16;
-            }
+            let bias_grad = grad[i] / 100;
+            self.bias[i] = (self.bias[i] as i32 - bias_grad).clamp(-500, 500) as i16;
         }
+
+        self.transitions += 1;
     }
 
     fn apply_transition(&mut self, idx: usize, needed: i8) {
