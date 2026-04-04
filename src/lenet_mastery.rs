@@ -299,18 +299,25 @@ impl MasteryLayer {
                 // Threshold gate
                 if w.pressure.abs() >= self.pressure_threshold {
                     let needed = if w.pressure > 0 { 1i8 } else { -1 };
+
+                    // Thermal-adaptive step: hot=big, cold=precise
+                    let step = if w.temperature >= 192 { 5u8 }
+                        else if w.temperature >= 128 { 3 }
+                        else if w.temperature >= 64 { 2 }
+                        else { 1 };
+
                     if w.polarity == needed {
-                        w.magnitude = w.magnitude.saturating_add(self.magnitude_step);
+                        w.magnitude = w.magnitude.saturating_add(step);
                     } else if w.polarity == -needed {
-                        if w.magnitude <= self.magnitude_step {
+                        if w.magnitude <= step {
                             w.magnitude = 0;
                             w.polarity = 0;
                         } else {
-                            w.magnitude -= self.magnitude_step;
+                            w.magnitude -= step;
                         }
                     } else {
                         w.polarity = needed;
-                        w.magnitude = self.magnitude_step;
+                        w.magnitude = step;
                     }
                     self.transitions += 1;
                     w.pressure = 0;
