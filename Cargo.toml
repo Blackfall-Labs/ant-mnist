@@ -23,3 +23,7 @@ path = "src/main.rs"
 [[bin]]
 name = "ant-mnist-viz"
 path = "src/viz.rs"
+
+[[bin]]
+name = "flow-experiment"
+path = "src/flow_experiment.rs"

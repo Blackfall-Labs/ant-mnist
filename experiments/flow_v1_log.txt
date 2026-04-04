@@ -1,0 +1,271 @@
+warning: use of deprecated associated function `Signal::from_i16`: defaults multiplier to 1 — use Signal::from_signed_i32(val) for large ranges or construct with explicit multiplier
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:437:15
+    |
+437 |         Self::from_i16(delta)
+    |               ^^^^^^^^
+    |
+    = note: `#[warn(deprecated)]` on by default
+
+warning: use of deprecated associated function `Signal::positive`: use Signal::positive_amplified(mag, mul) — s = p × m × k requires all three values
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:452:19
+    |
+452 |             Self::positive(magnitude)
+    |                   ^^^^^^^^
+
+warning: use of deprecated associated function `Signal::from_spike_rate`: defaults multiplier to 1 — construct Signal with explicit multiplier instead
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:464:15
+    |
+464 |         Self::from_spike_rate(rate_hz, max_rate_hz)
+    |               ^^^^^^^^^^^^^^^
+
+warning: use of deprecated associated function `Signal::from_signed_i32`: defaults multiplier to 1 — use Signal::from_current(val) for full p × m × k range
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:583:15
+    |
+583 |         Self::from_signed_i32(a + b)
+    |               ^^^^^^^^^^^^^^^
+
+warning: use of deprecated associated function `Signal::from_signed_i32`: defaults multiplier to 1 — use Signal::from_current(val) for full p × m × k range
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:632:36
+    |
+632 |             let mut result = Self::from_signed_i32((current + delta as i16) as i32);
+    |                                    ^^^^^^^^^^^^^^^
+
+warning: use of deprecated associated function `Signal::from_signed_i32`: defaults multiplier to 1 — use Signal::from_current(val) for full p × m × k range
+   --> E:\repos\blackfall-labs\ternary-signal\src\lib.rs:636:36
+    |
+636 |             let mut result = Self::from_signed_i32((current - delta as i16) as i32);
+    |                                    ^^^^^^^^^^^^^^^
+
+warning: `ternary-signal` (lib) generated 6 warnings
+warning: field `vector_width` is never read
+  --> E:\repos\blackfall-labs\atomic-neural-transistors\src\memory.rs:47:5
+   |
+38 | pub struct MemoryANT {
+   |            --------- field in this struct
+...
+47 |     vector_width: u16,
+   |     ^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: method `resolve_path` is never used
+  --> E:\repos\blackfall-labs\atomic-neural-transistors\src\modules\ant_ml.rs:97:8
+   |
+80 | impl AntRuntime {
+   | --------------- method in this implementation
+...
+97 |     fn resolve_path(&self, path: &str) -> PathBuf {
+   |        ^^^^^^^^^^^^
+
+warning: `atomic-neural-transistors` (lib) generated 2 warnings
+warning: associated function `print_image` is never used
+  --> src\mnist.rs:65:12
+   |
+18 | impl MnistDataset {
+   | ----------------- associated function in this implementation
+...
+65 |     pub fn print_image(image: &MnistImage) {
+   |            ^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: associated items `new` and `band` are never used
+  --> src\flow.rs:55:12
+   |
+54 | impl FlowWeight {
+   | --------------- associated items in this implementation
+55 |     pub fn new(value: i16) -> Self {
+   |            ^^^
+...
+65 |     pub fn band(&self) -> &'static str {
+   |            ^^^^
+
+warning: associated items `from_values`, `values`, `temperatures`, `momenta`, `nonzero_count`, and `row_magnitudes` are never used
+   --> src\flow.rs:139:12
+    |
+128 | impl FlowMatrix {
+    | --------------- associated items in this implementation
+...
+139 |     pub fn from_values(rows: usize, cols: usize, values: &[i16]) -> Self {
+    |            ^^^^^^^^^^^
+...
+204 |     pub fn values(&self) -> Vec<i16> {
+    |            ^^^^^^
+...
+209 |     pub fn temperatures(&self) -> Vec<u8> {
+    |            ^^^^^^^^^^^^
+...
+215 |     pub fn momenta(&self) -> Vec<u8> {
+    |            ^^^^^^^
+...
+225 |     pub fn nonzero_count(&self) -> usize {
+    |            ^^^^^^^^^^^^^
+...
+230 |     pub fn row_magnitudes(&self) -> Vec<i64> {
+    |            ^^^^^^^^^^^^^^
+
+warning: function `encode_pixel` is never used
+   --> src\flow.rs:246:4
+    |
+246 | fn encode_pixel(px: u8) -> i16 {
+    |    ^^^^^^^^^^^^
+
+warning: function `encode_image` is never used
+   --> src\flow.rs:252:4
+    |
+252 | fn encode_image(pixels: &[u8]) -> Vec<i16> {
+    |    ^^^^^^^^^^^^
+
+warning: `ant-mnist` (bin "flow-experiment") generated 5 warnings
+    Finished `release` profile [optimized] target(s) in 0.25s
+     Running `target\release\flow-experiment.exe data`
+=== Flow Weight Experiment A: Single-Layer 784→10 ===
+Loading MNIST...
+  train=60000, test=10000
+  weights: 7840 (47040 bytes, 45.9 KB)
+  FlowWeight size: 6 bytes
+
+  Cycle   1 | train 21.1% | test 8.5% | collapse 0.80 | mag 241±182 | mom 371 | H/W/C/F 7840/0/0/0 | nz 7831 | 94ms | 96.5MB
+          | d0:0% d1:0% d2:0% d3:0% d4:1% d5:0% d6:0% d7:0% d8:0% d9:89%
+          | diag: [0, 0, 0, 0, 1, 0, 0, 0, 0, 84]
+  Cycle   2 | train 10.2% | 110ms
+  Cycle   3 | train 11.2% | 112ms
+  Cycle   4 | train 9.7% | 113ms
+  Cycle   5 | train 9.6% | test 8.7% | collapse 0.90 | mag 261±180 | mom 541 | H/W/C/F 7840/0/0/0 | nz 7832 | 119ms | 96.5MB
+          | d0:0% d1:0% d2:0% d3:0% d4:0% d5:0% d6:100% d7:0% d8:0% d9:0%
+          | diag: [0, 0, 0, 0, 0, 0, 87, 0, 0, 0]
+  Cycle   6 | train 9.4% | 128ms
+  Cycle   7 | train 10.1% | 137ms
+  Cycle   8 | train 9.6% | 145ms
+  Cycle   9 | train 9.7% | 155ms
+  Cycle  10 | train 10.5% | test 9.5% | collapse 0.70 | mag 255±179 | mom 447 | H/W/C/F 7840/0/0/0 | nz 7834 | 167ms | 96.5MB
+          | d0:0% d1:0% d2:0% d3:79% d4:10% d5:0% d6:0% d7:0% d8:0% d9:0%
+          | diag: [0, 0, 0, 84, 11, 0, 0, 0, 0, 0]
+  Cycle  11 | train 11.2% | 180ms
+  Cycle  12 | train 10.1% | 197ms
+  Cycle  13 | train 10.6% | 214ms
+  Cycle  14 | train 8.7% | 239ms
+  Cycle  15 | train 10.9% | test 10.9% | collapse 0.50 | mag 244±182 | mom 437 | H/W/C/F 7840/0/0/0 | nz 7838 | 260ms | 96.5MB
+          | d0:0% d1:0% d2:0% d3:0% d4:0% d5:0% d6:55% d7:62% d8:0% d9:0%
+          | diag: [0, 0, 0, 0, 0, 0, 48, 61, 0, 0]
+  Cycle  16 | train 11.8% | 278ms
+  Cycle  17 | train 9.2% | 301ms
+  Cycle  18 | train 9.9% | 329ms
+  Cycle  19 | train 10.7% | 345ms
+  Cycle  20 | train 9.8% | test 10.7% | collapse 0.89 | mag 249±187 | mom 518 | H/W/C/F 7840/0/0/0 | nz 7840 | 373ms | 96.5MB
+          | d0:0% d1:0% d2:0% d3:99% d4:0% d5:1% d6:0% d7:0% d8:0% d9:0%
+          | diag: [0, 0, 0, 106, 0, 1, 0, 0, 0, 0]
+  Cycle  21 | train 10.0% | 402ms
+  Cycle  22 | train 10.9% | 435ms
+  Cycle  23 | train 10.0% | 454ms
+  Cycle  24 | train 10.9% | 495ms
+  Cycle  25 | train 11.1% | test 8.5% | collapse 0.90 | mag 250±180 | mom 468 | H/W/C/F 7840/0/0/0 | nz 7839 | 514ms | 96.5MB
+          | d0:100% d1:0% d2:0% d3:0% d4:0% d5:0% d6:0% d7:0% d8:0% d9:0%
+          | diag: [85, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  Cycle  26 | train 9.7% | 105ms
+  Cycle  27 | train 9.7% | 107ms
+  Cycle  28 | train 9.1% | 110ms
+  Cycle  29 | train 10.3% | 113ms
+  Cycle  30 | train 9.4% | test 11.8% | collapse 0.57 | mag 268±173 | mom 475 | H/W/C/F 7840/0/0/0 | nz 7836 | 121ms | 96.5MB
+          | d0:0% d1:0% d2:0% d3:0% d4:68% d5:0% d6:0% d7:43% d8:0% d9:0%
+          | diag: [0, 0, 0, 0, 75, 0, 0, 43, 0, 0]
+  Cycle  31 | train 12.1% | 129ms
+  Cycle  32 | train 10.1% | 138ms
+  Cycle  33 | train 10.8% | 150ms
+  Cycle  34 | train 8.3% | 162ms
+  Cycle  35 | train 11.1% | test 13.2% | collapse 0.41 | mag 253±185 | mom 529 | H/W/C/F 7840/0/0/0 | nz 7837 | 183ms | 96.5MB
+          | d0:0% d1:0% d2:0% d3:0% d4:49% d5:0% d6:0% d7:30% d8:54% d9:0%
+          | diag: [0, 0, 0, 0, 54, 0, 0, 30, 48, 0]
+  Cycle  36 | train 10.7% | 188ms
+  Cycle  37 | train 9.4% | 200ms
+  Cycle  38 | train 10.5% | 231ms
+  Cycle  39 | train 8.6% | 241ms
+  Cycle  40 | train 10.6% | test 10.0% | collapse 0.90 | mag 273±165 | mom 501 | H/W/C/F 7840/0/0/0 | nz 7837 | 261ms | 96.5MB
+          | d0:0% d1:0% d2:1% d3:0% d4:0% d5:0% d6:0% d7:100% d8:0% d9:0%
+          | diag: [0, 0, 1, 0, 0, 0, 0, 99, 0, 0]
+  Cycle  41 | train 11.5% | 277ms
+  Cycle  42 | train 11.1% | 297ms
+  Cycle  43 | train 10.4% | 332ms
+  Cycle  44 | train 10.7% | 358ms
+  Cycle  45 | train 9.7% | test 12.6% | collapse 0.90 | mag 270±188 | mom 452 | H/W/C/F 7840/0/0/0 | nz 7835 | 383ms | 96.5MB
+          | d0:0% d1:100% d2:0% d3:0% d4:0% d5:0% d6:0% d7:0% d8:0% d9:0%
+          | diag: [0, 126, 0, 0, 0, 0, 0, 0, 0, 0]
+  Cycle  46 | train 9.8% | 404ms
+  Cycle  47 | train 8.2% | 425ms
+  Cycle  48 | train 12.4% | 457ms
+  Cycle  49 | train 12.2% | 497ms
+  Cycle  50 | train 9.8% | test 8.9% | collapse 0.90 | mag 275±177 | mom 506 | H/W/C/F 7840/0/0/0 | nz 7839 | 525ms | 96.5MB
+          | d0:0% d1:0% d2:0% d3:0% d4:0% d5:0% d6:0% d7:0% d8:100% d9:0%
+          | diag: [0, 0, 0, 0, 0, 0, 0, 0, 89, 0]
+  Cycle  51 | train 10.8% | 108ms
+  Cycle  52 | train 9.5% | 107ms
+  Cycle  53 | train 9.5% | 110ms
+  Cycle  54 | train 10.2% | 118ms
+  Cycle  55 | train 9.3% | test 12.6% | collapse 0.90 | mag 277±180 | mom 410 | H/W/C/F 7840/0/0/0 | nz 7831 | 123ms | 96.5MB
+          | d0:0% d1:100% d2:0% d3:0% d4:0% d5:0% d6:0% d7:0% d8:0% d9:0%
+          | diag: [0, 126, 0, 0, 0, 0, 0, 0, 0, 0]
+  Cycle  56 | train 10.3% | 128ms
+  Cycle  57 | train 9.2% | 136ms
+  Cycle  58 | train 10.6% | 146ms
+  Cycle  59 | train 8.6% | 155ms
+  Cycle  60 | train 11.7% | test 7.4% | collapse 0.28 | mag 248±189 | mom 501 | H/W/C/F 7840/0/0/0 | nz 7839 | 168ms | 96.5MB
+          | d0:0% d1:0% d2:24% d3:7% d4:35% d5:0% d6:0% d7:0% d8:0% d9:0%
+          | diag: [0, 0, 28, 8, 38, 0, 0, 0, 0, 0]
+  Cycle  61 | train 10.9% | 181ms
+  Cycle  62 | train 8.0% | 200ms
+  Cycle  63 | train 9.3% | 219ms
+  Cycle  64 | train 8.6% | 234ms
+  Cycle  65 | train 11.4% | test 9.6% | collapse 0.58 | mag 246±184 | mom 461 | H/W/C/F 7840/0/0/0 | nz 7837 | 250ms | 96.5MB
+          | d0:68% d1:0% d2:0% d3:0% d4:0% d5:0% d6:0% d7:38% d8:0% d9:0%
+          | diag: [58, 0, 0, 0, 0, 0, 0, 38, 0, 0]
+  Cycle  66 | train 10.9% | 273ms
+  Cycle  67 | train 11.2% | 299ms
+  Cycle  68 | train 9.2% | 324ms
+  Cycle  69 | train 10.9% | 342ms
+  Cycle  70 | train 10.4% | test 10.7% | collapse 0.90 | mag 246±183 | mom 420 | H/W/C/F 7840/0/0/0 | nz 7838 | 369ms | 96.5MB
+          | d0:0% d1:0% d2:0% d3:100% d4:0% d5:0% d6:0% d7:0% d8:0% d9:0%
+          | diag: [0, 0, 0, 107, 0, 0, 0, 0, 0, 0]
+  Cycle  71 | train 9.7% | 406ms
+  Cycle  72 | train 10.2% | 427ms
+  Cycle  73 | train 11.9% | 452ms
+  Cycle  74 | train 10.5% | 496ms
+  Cycle  75 | train 10.5% | test 4.5% | collapse 0.47 | mag 253±175 | mom 548 | H/W/C/F 7840/0/0/0 | nz 7836 | 515ms | 96.5MB
+          | d0:0% d1:0% d2:0% d3:0% d4:0% d5:52% d6:0% d7:0% d8:0% d9:0%
+          | diag: [0, 0, 0, 0, 0, 45, 0, 0, 0, 0]
+  Cycle  76 | train 10.2% | 105ms
+  Cycle  77 | train 9.8% | 107ms
+  Cycle  78 | train 8.8% | 112ms
+  Cycle  79 | train 10.6% | 116ms
+  Cycle  80 | train 11.5% | test 7.8% | collapse 0.63 | mag 258±179 | mom 368 | H/W/C/F 7840/0/0/0 | nz 7839 | 124ms | 96.5MB
+          | d0:0% d1:4% d2:4% d3:0% d4:0% d5:5% d6:0% d7:0% d8:72% d9:0%
+          | diag: [0, 5, 5, 0, 0, 4, 0, 0, 64, 0]
+  Cycle  81 | train 8.3% | 127ms
+  Cycle  82 | train 8.0% | 137ms
+  Cycle  83 | train 11.2% | 146ms
+  Cycle  84 | train 9.6% | 154ms
+  Cycle  85 | train 10.1% | test 8.7% | collapse 0.90 | mag 277±174 | mom 466 | H/W/C/F 7840/0/0/0 | nz 7838 | 169ms | 96.5MB
+          | d0:0% d1:0% d2:0% d3:0% d4:0% d5:0% d6:100% d7:0% d8:0% d9:0%
+          | diag: [0, 0, 0, 0, 0, 0, 87, 0, 0, 0]
+  Cycle  86 | train 10.7% | 181ms
+  Cycle  87 | train 9.1% | 203ms
+  Cycle  88 | train 10.3% | 219ms
+  Cycle  89 | train 11.7% | 232ms
+  Cycle  90 | train 11.5% | test 11.0% | collapse 0.90 | mag 262±179 | mom 462 | H/W/C/F 7840/0/0/0 | nz 7836 | 254ms | 96.5MB
+          | d0:0% d1:0% d2:0% d3:0% d4:100% d5:0% d6:0% d7:0% d8:0% d9:0%
+          | diag: [0, 0, 0, 0, 110, 0, 0, 0, 0, 0]
+  Cycle  91 | train 8.2% | 272ms
+  Cycle  92 | train 9.9% | 298ms
+  Cycle  93 | train 9.8% | 316ms
+  Cycle  94 | train 10.3% | 341ms
+  Cycle  95 | train 9.2% | test 9.6% | collapse 0.69 | mag 267±173 | mom 457 | H/W/C/F 7840/0/0/0 | nz 7838 | 368ms | 96.5MB
+          | d0:0% d1:0% d2:0% d3:0% d4:0% d5:0% d6:10% d7:79% d8:0% d9:10%
+          | diag: [0, 0, 0, 0, 0, 0, 9, 78, 0, 9]
+  Cycle  96 | train 11.1% | 405ms
+  Cycle  97 | train 9.8% | 426ms
+  Cycle  98 | train 10.2% | 453ms
+  Cycle  99 | train 9.7% | 494ms
+  Cycle 100 | train 10.3% | test 8.5% | collapse 0.90 | mag 278±189 | mom 370 | H/W/C/F 7840/0/0/0 | nz 7837 | 518ms | 96.5MB
+          | d0:100% d1:0% d2:0% d3:0% d4:0% d5:0% d6:0% d7:0% d8:0% d9:0%
+          | diag: [85, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+=== Experiment A complete ===
