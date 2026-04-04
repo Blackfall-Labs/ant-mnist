@@ -230,7 +230,7 @@ impl MasteryLayer {
         }
     }
 
-    /// Forward: dot product using current() values.
+    /// Forward: clean dot product. Temperature does NOT participate here.
     pub fn forward(&self, input: &[i16]) -> Vec<i16> {
         let mut output = vec![0i16; self.rows];
         for i in 0..self.rows {
